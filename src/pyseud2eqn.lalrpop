@@ -1,0 +1,37 @@
+use crate::ast::{Expr, Equation, Opcode};
+
+grammar;
+
+pub Equation: Equation<'input> = {
+	<Expr> "=" <Expr> => (<>).into()
+};
+
+pub Expr: Box<Expr<'input>> = {
+	Expr ExprOp Factor => Box::new(Expr::Op(<>)),
+	Factor,
+};
+
+ExprOp: Opcode = {
+	"+" => Opcode::Add,
+	"-" => Opcode::Sub,
+};
+
+Factor: Box<Expr<'input>> = {
+	Factor FactorOp Term => Box::new(Expr::Op(<>)),
+	Term,
+};
+
+FactorOp: Opcode = {
+	"**" => Opcode::Superscript,
+	"__" => Opcode::Superscript,
+	"_"  => Opcode::Subscript,
+	"*"  => Opcode::Mul,
+	"/"  => Opcode::Div,
+};
+
+Term: Box<Expr<'input>> = {
+	Name => Box::new(Expr::Name(<>)),
+	"(" <Expr> ")",
+}
+
+Name: &'input str = r"[[:alnum:]]+";
