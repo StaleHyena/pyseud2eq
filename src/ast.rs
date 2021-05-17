@@ -1,25 +1,31 @@
 use std::fmt;
 
-pub struct Equation<'a> {
-    lhs: Box<Expr<'a>>,
-    op: Opcode,
-    rhs: Box<Expr<'a>>,
+pub enum Target {
+    Equation(Equation),
+    Expr(Box<Expr>),
 }
 
-type EqTuple<'a> = (Box<Expr<'a>>,Opcode,Box<Expr<'a>>);
-impl<'a> From<EqTuple<'a>> for Equation<'a> {
-    fn from(v: EqTuple<'a>) -> Self {
+pub struct Equation {
+    pub lhs: Box<Expr>,
+    pub op: Opcode,
+    pub rhs: Box<Expr>,
+}
+
+type EqTuple = (Box<Expr>,Opcode,Box<Expr>);
+impl From<EqTuple> for Equation {
+    fn from(v: EqTuple) -> Self {
         Self { lhs: v.0, op: v.1, rhs: v.2 }
     }
 }
 
-pub enum ExprKind<'a> {
-    Name(&'a str),
-    Op(Box<Expr<'a>>, Opcode, Box<Expr<'a>>),
+pub enum ExprKind {
+    Ident(String),
+    UnaryOp(Opcode, Box<Expr>),
+    BinaryOp(Box<Expr>, Opcode, Box<Expr>),
 }
 
-pub struct Expr<'a> {
-    pub v: ExprKind<'a>,
+pub struct Expr {
+    pub v: ExprKind,
     pub l: usize,
 }
 
@@ -60,16 +66,23 @@ impl fmt::Display for Opcode {
     }
 }
 
-impl<'a> fmt::Display for Expr<'a> {
+impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::ExprKind::*;
         match &self.v {
-            Name(x) => write!(f, "{}",
+            Ident(x) => write!(f, "{}",
                     if self.l > 0 { raise_expr(x) }
                     else { (*x).to_string() }
                 ),
-            Op(x,y,z) => {
-                let res = format!("{} {} {}", x, y, z);
+            UnaryOp(o,r) => {
+                let res = format!("{}{}", o, r);
+                write!(f, "{}",
+                    if self.l > 0 { raise_expr(&res) }
+                    else { res }
+                )
+            },
+            BinaryOp(l,o,r) => {
+                let res = format!("{} {} {}", l, o, r);
                 write!(f, "{}",
                     if self.l > 0 { raise_expr(&res) }
                     else { res }
@@ -79,9 +92,15 @@ impl<'a> fmt::Display for Expr<'a> {
     }
 }
 
-impl<'a> fmt::Display for Equation<'a> {
+impl fmt::Display for Equation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {} {}", &self.lhs, &self.op, &self.rhs)
+    }
+}
+
+impl fmt::Display for Target {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", &self)
     }
 }
 

@@ -1,21 +1,50 @@
 #[macro_use] extern crate lalrpop_util;
 lalrpop_mod!(pub pyseud2eqn);
+use std::io::{self, BufReader, BufRead};
+use regex::Regex;
 
 mod ast;
 
-fn print_expr(parser: &pyseud2eqn::ExprParser, v: &str) {
-    println!("{}\n{}", v, parser.parse(v).unwrap());
+fn print_target(parser: &pyseud2eqn::TargetParser, v: &str) {
+    println!("{}", parser.parse(v).unwrap());
 }
 
-fn print_equation(parser: &pyseud2eqn::EquationParser, v: &str) {
-    println!("{}\n{}", v, parser.parse(v).unwrap());
+fn print_expr(parser: &pyseud2eqn::ExprParser, v: &str) {
+    println!("{}", parser.parse(v).unwrap());
 }
 
 fn main() {
-    let p = pyseud2eqn::EquationParser::new();
-    print_equation(&p, "2*pi = tau");
-    print_equation(&p, "(pi) > (tau/3)");
-    print_equation(&p, "pi != tau/4");
+    let p = pyseud2eqn::TargetParser::new();
+    print_target(&p, ".EQPY 12 EQPY");
+    print_target(&p, ".eqpy 0 eqpy");
+}
+fn omain() -> std::io::Result<()> {
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() < 2 {
+        use std::io::*;
+        return Err(Error::new(ErrorKind::NotFound, "No input file!"));
+    }
+    
+    let filename = args.get(1).unwrap();
+    let reader: Box<dyn BufRead> = match filename.as_str() {
+        "-" => Box::new(BufReader::new(io::stdin())),
+        _ => Box::new(BufReader::new(std::fs::File::open(filename).unwrap())),
+    };
+
+    let parser = pyseud2eqn::TargetParser::new();
+    let prefix = Regex::new(r"^\.(?i)EQPY").unwrap();
+    for line in reader.lines() {
+        if let Ok(line) = line {
+            if prefix.is_match(line.as_str()) {
+                print_target(&parser, prefix.split(line.as_str()).next()
+                    .expect(format!("No equation found for line \"{}\"", line).as_str()));
+            } else {
+                println!("{}", line);
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[test]
@@ -74,5 +103,16 @@ fn equations() {
                  == "0 = 0");
     assert!(p.parse("X__' = Y__'").unwrap().to_string()
                  == "X sup ' = Y sup '");
+    assert!(p.parse("pi != tau/4").unwrap().to_string()
+                 == "pi != tau over 4");
+    assert!(p.parse("0 <= 1").unwrap().to_string()
+                 == "0 <= 1");
+}
+
+#[test]
+fn targets() {
+    let p = pyseud2eqn::TargetParser::new();
+    print_target(&p, "12");
+    print_target(&p, "12 = alpha / 2");
 }
 

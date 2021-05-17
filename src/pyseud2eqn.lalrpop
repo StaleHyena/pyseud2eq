@@ -1,8 +1,14 @@
-use crate::ast::{Expr, ExprKind, Equation, Opcode};
+use crate::ast::{Target, Expr, ExprKind, Equation, Opcode};
 
+#[LALR]
 grammar;
 
-pub Equation: Equation<'input> = {
+pub Target: Target = {
+	Equation => Target::Equation(<>),
+	LoneExpr => Target::Expr(<>),
+};
+
+pub Equation: Equation = {
 	Expr EquationOp Expr => (<>).into(),
 };
 
@@ -15,31 +21,22 @@ pub EquationOp: Opcode = {
 	"<=" => Opcode::LtEquals,
 };
 
-pub Expr: Box<Expr<'input>> = {
-	Expr ExprOp Factor => {
-		let (rhs, op, lhs) = (<>);
-		Box::new(Expr {
-			l: 0,
-			v: ExprKind::Op(rhs, op, lhs),
-		})
-	},
+pub Expr: Box<Expr> = {
+	Expr ExprOp Factor => Box::new(Expr { v: ExprKind::BinaryOp(<>), l: 0 }),
+	ExprOp Factor => Box::new(Expr { v: ExprKind::UnaryOp(<>), l: 0 }),
 	Factor,
 };
+
+Marker = r"\.|\s(?i)EQPY";
+LoneExpr: Box<Expr> = Marker <Expr> Marker;
 
 ExprOp: Opcode = {
 	"+" => Opcode::Add,
 	"-" => Opcode::Sub,
 };
 
-Factor: Box<Expr<'input>> = {
-	Factor FactorOp Term => {
-		let (rhs, op, lhs) = (<>);
-		Box::new(Expr {
-			//l: std::cmp::min(rhs.l, lhs.l),
-			l: 0,
-			v: ExprKind::Op(rhs, op, lhs),
-		})
-	},
+Factor: Box<Expr> = {
+	Factor FactorOp Term => Box::new(Expr { v: ExprKind::BinaryOp(<>), l: 0, }),
 	Term,
 };
 
@@ -51,9 +48,9 @@ FactorOp: Opcode = {
 	"/"  => Opcode::Div,
 };
 
-Term: Box<Expr<'input>> = {
-	Name => Box::new(Expr {
-		v: ExprKind::Name(<>),
+Term: Box<Expr> = {
+	Ident => Box::new(Expr {
+		v: ExprKind::Ident(<>),
 		l: 0,
 	}),
 	"(" <Expr> ")" => {
@@ -62,6 +59,15 @@ Term: Box<Expr<'input>> = {
 			l: (<>).l + 1,
 		})
 	},
-}
+};
 
-Name: &'input str = r#"-?[[[:alnum:]]|['|"|\^|%|@|`|\&|\?|!|\[|\]|'|\&]]+\.?([[:alnum:]]+)?"#;
+Ident: String = {
+	Name => (<>).to_owned(),
+	// Slight bug with the signs
+	Name "." Name => {
+		format!("{}{}{}", <>)
+	},
+};
+
+Name: &'input str = r#"[[[:alnum:]]|['"\^%@`\&\?!\[\]`\&]]+"#;
+
