@@ -2,13 +2,14 @@ use std::fmt;
 
 pub struct Equation<'a> {
     lhs: Box<Expr<'a>>,
+    op: Opcode,
     rhs: Box<Expr<'a>>,
 }
 
-type EqTuple<'a> = (Box<Expr<'a>>,Box<Expr<'a>>);
+type EqTuple<'a> = (Box<Expr<'a>>,Opcode,Box<Expr<'a>>);
 impl<'a> From<EqTuple<'a>> for Equation<'a> {
     fn from(v: EqTuple<'a>) -> Self {
-        Self { lhs: v.0, rhs: v.1 }
+        Self { lhs: v.0, op: v.1, rhs: v.2 }
     }
 }
 
@@ -30,6 +31,12 @@ pub enum Opcode {
     Div,
     Subscript,
     Superscript,
+    Equals,
+    NotEquals,
+    GreaterThan,
+    LesserThan,
+    GtEquals,
+    LtEquals,
 }
 
 impl fmt::Display for Opcode {
@@ -42,6 +49,12 @@ impl fmt::Display for Opcode {
             Div => "over",
             Subscript => "sub",
             Superscript => "sup",
+            Equals => "=",
+            NotEquals => "!=",
+            GreaterThan => ">",
+            LesserThan => "<",
+            GtEquals => ">=",
+            LtEquals => "<=",
         };
         write!(f, "{}", name)
     }
@@ -68,7 +81,7 @@ impl<'a> fmt::Display for Expr<'a> {
 
 impl<'a> fmt::Display for Equation<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} = {}", &self.lhs, &self.rhs)
+        write!(f, "{} {} {}", &self.lhs, &self.op, &self.rhs)
     }
 }
 

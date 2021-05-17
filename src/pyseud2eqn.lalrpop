@@ -3,7 +3,16 @@ use crate::ast::{Expr, ExprKind, Equation, Opcode};
 grammar;
 
 pub Equation: Equation<'input> = {
-	<Expr> "=" <Expr> => (<>).into()
+	Expr EquationOp Expr => (<>).into(),
+};
+
+pub EquationOp: Opcode = {
+	"=" => Opcode::Equals,
+	"!=" => Opcode::NotEquals,
+	">" => Opcode::GreaterThan,
+	"<" => Opcode::LesserThan,
+	">=" => Opcode::GtEquals,
+	"<=" => Opcode::LtEquals,
 };
 
 pub Expr: Box<Expr<'input>> = {
@@ -48,7 +57,6 @@ Term: Box<Expr<'input>> = {
 		l: 0,
 	}),
 	"(" <Expr> ")" => {
-		println!("up \"{}\" :: #{}", &(<>), &(<>).l);
 		Box::new(Expr {
 			v: (<>).v,
 			l: (<>).l + 1,
@@ -56,4 +64,4 @@ Term: Box<Expr<'input>> = {
 	},
 }
 
-Name: &'input str = r"-?[[:alnum:]]+\.?([[:alnum:]]+)?";
+Name: &'input str = r#"-?[[[:alnum:]]|['|"|\^|%|@|`|\&|\?|!|\[|\]|'|\&]]+\.?([[:alnum:]]+)?"#;

@@ -7,10 +7,15 @@ fn print_expr(parser: &pyseud2eqn::ExprParser, v: &str) {
     println!("{}\n{}", v, parser.parse(v).unwrap());
 }
 
+fn print_equation(parser: &pyseud2eqn::EquationParser, v: &str) {
+    println!("{}\n{}", v, parser.parse(v).unwrap());
+}
+
 fn main() {
-    let p = pyseud2eqn::ExprParser::new();
-    //print_expr(&p, "301 / (pi/tau)");
-    print_expr(&p, "((-87+78)**(1/omega))/((alpha_1)__45)");
+    let p = pyseud2eqn::EquationParser::new();
+    print_equation(&p, "2*pi = tau");
+    print_equation(&p, "(pi) > (tau/3)");
+    print_equation(&p, "pi != tau/4");
 }
 
 #[test]
@@ -60,5 +65,14 @@ fn paren() {
                  == "301 over { pi over tau }");
     assert!(p.parse("((-87+78)**(1/omega))/(alpha_1)__45").unwrap().to_string()
                  == "{ { -87 + 78 } sup { 1 over omega } } over { alpha sub 1 } sup 45");
+}
+
+#[test]
+fn equations() {
+    let p = pyseud2eqn::EquationParser::new();
+    assert!(p.parse("0 = 0").unwrap().to_string()
+                 == "0 = 0");
+    assert!(p.parse("X__' = Y__'").unwrap().to_string()
+                 == "X sup ' = Y sup '");
 }
 
