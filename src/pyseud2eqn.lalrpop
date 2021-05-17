@@ -1,4 +1,4 @@
-use crate::ast::{Expr, Equation, Opcode};
+use crate::ast::{Expr, ExprKind, Equation, Opcode};
 
 grammar;
 
@@ -7,7 +7,13 @@ pub Equation: Equation<'input> = {
 };
 
 pub Expr: Box<Expr<'input>> = {
-	Expr ExprOp Factor => Box::new(Expr::Op(<>)),
+	Expr ExprOp Factor => {
+		let (rhs, op, lhs) = (<>);
+		Box::new(Expr {
+			l: 0,
+			v: ExprKind::Op(rhs, op, lhs),
+		})
+	},
 	Factor,
 };
 
@@ -17,7 +23,14 @@ ExprOp: Opcode = {
 };
 
 Factor: Box<Expr<'input>> = {
-	Factor FactorOp Term => Box::new(Expr::Op(<>)),
+	Factor FactorOp Term => {
+		let (rhs, op, lhs) = (<>);
+		Box::new(Expr {
+			//l: std::cmp::min(rhs.l, lhs.l),
+			l: 0,
+			v: ExprKind::Op(rhs, op, lhs),
+		})
+	},
 	Term,
 };
 
@@ -30,8 +43,17 @@ FactorOp: Opcode = {
 };
 
 Term: Box<Expr<'input>> = {
-	Name => Box::new(Expr::Name(<>)),
-	"(" <Expr> ")",
+	Name => Box::new(Expr {
+		v: ExprKind::Name(<>),
+		l: 0,
+	}),
+	"(" <Expr> ")" => {
+		println!("up \"{}\" :: #{}", &(<>), &(<>).l);
+		Box::new(Expr {
+			v: (<>).v,
+			l: (<>).l + 1,
+		})
+	},
 }
 
-Name: &'input str = r"[[:alnum:]]+";
+Name: &'input str = r"-?[[:alnum:]]+\.?([[:alnum:]]+)?";

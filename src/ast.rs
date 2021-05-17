@@ -12,9 +12,14 @@ impl<'a> From<EqTuple<'a>> for Equation<'a> {
     }
 }
 
-pub enum Expr<'a> {
+pub enum ExprKind<'a> {
     Name(&'a str),
     Op(Box<Expr<'a>>, Opcode, Box<Expr<'a>>),
+}
+
+pub struct Expr<'a> {
+    pub v: ExprKind<'a>,
+    pub l: usize,
 }
 
 // TODO: add more eqn ops
@@ -44,10 +49,19 @@ impl fmt::Display for Opcode {
 
 impl<'a> fmt::Display for Expr<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use self::Expr::*;
-        match self {
-            Name(x) => write!(f, "{}", x),
-            Op(x,y,z) => write!(f, "{} {} {}", x, y, z)
+        use self::ExprKind::*;
+        match &self.v {
+            Name(x) => write!(f, "{}",
+                    if self.l > 0 { raise_expr(x) }
+                    else { (*x).to_string() }
+                ),
+            Op(x,y,z) => {
+                let res = format!("{} {} {}", x, y, z);
+                write!(f, "{}",
+                    if self.l > 0 { raise_expr(&res) }
+                    else { res }
+                )
+            },
         }
     }
 }
@@ -56,4 +70,8 @@ impl<'a> fmt::Display for Equation<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} = {}", &self.lhs, &self.rhs)
     }
+}
+
+fn raise_expr(s: &str) -> String {
+    format!("{{ {} }}", s)
 }
