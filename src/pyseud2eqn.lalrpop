@@ -1,15 +1,10 @@
-use crate::ast::{Target, Expr, ExprKind, Equation, Opcode};
+use crate::ast::{Expr, ExprKind, Opcode};
 
-#[LALR]
 grammar;
 
-pub Target: Target = {
-	Equation => Target::Equation(<>),
-	LoneExpr => Target::Expr(<>),
-};
-
-pub Equation: Equation = {
-	Expr EquationOp Expr => (<>).into(),
+pub Equation: Box<Expr> = {
+	Equation EquationOp Expr => Box::new(Expr { v: ExprKind::BinaryOp(<>), l: 0 }),
+	Expr,
 };
 
 pub EquationOp: Opcode = {
@@ -27,8 +22,10 @@ pub Expr: Box<Expr> = {
 	Factor,
 };
 
-Marker = r"\.|\s(?i)EQPY";
-LoneExpr: Box<Expr> = Marker <Expr> Marker;
+Marker = r"[\.\s](?i)EQPY";
+pub Target: String = {
+	Marker <Equation> Marker => (<>).to_string(),
+};
 
 ExprOp: Opcode = {
 	"+" => Opcode::Add,
@@ -64,10 +61,9 @@ Term: Box<Expr> = {
 Ident: String = {
 	Name => (<>).to_owned(),
 	// Slight bug with the signs
-	Name "." Name => {
-		format!("{}{}{}", <>)
-	},
+	Name "." Name => format!("{}{}{}", <>),
+	Name Name => format!("{} {}", <>),
 };
 
-Name: &'input str = r#"[[[:alnum:]]|['"\^%@`\&\?!\[\]`\&]]+"#;
+Name: &'input str = r#"[[[:alnum:]]|['"\^\~%@`\&\?!\[\]`\&]]+"#;
 

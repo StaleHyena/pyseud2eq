@@ -9,16 +9,12 @@ fn print_target(parser: &pyseud2eqn::TargetParser, v: &str) {
     println!("{}", parser.parse(v).unwrap());
 }
 
+#[allow(unused)]
 fn print_expr(parser: &pyseud2eqn::ExprParser, v: &str) {
     println!("{}", parser.parse(v).unwrap());
 }
 
-fn main() {
-    let p = pyseud2eqn::TargetParser::new();
-    print_target(&p, ".EQPY 12 EQPY");
-    print_target(&p, ".eqpy 0 eqpy");
-}
-fn omain() -> std::io::Result<()> {
+fn main() -> std::io::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
         use std::io::*;
@@ -36,8 +32,7 @@ fn omain() -> std::io::Result<()> {
     for line in reader.lines() {
         if let Ok(line) = line {
             if prefix.is_match(line.as_str()) {
-                print_target(&parser, prefix.split(line.as_str()).next()
-                    .expect(format!("No equation found for line \"{}\"", line).as_str()));
+                println!(".EQ\n{}\n.EN", parser.parse(line.as_str()).expect("Invalid input"));
             } else {
                 println!("{}", line);
             }
@@ -107,12 +102,14 @@ fn equations() {
                  == "pi != tau over 4");
     assert!(p.parse("0 <= 1").unwrap().to_string()
                  == "0 <= 1");
+    assert!(p.parse("0 < 1 < 10 < 100 != 12").unwrap().to_string()
+                 == "0 < 1 < 10 < 100 != 12");
 }
 
 #[test]
 fn targets() {
     let p = pyseud2eqn::TargetParser::new();
-    print_target(&p, "12");
-    print_target(&p, "12 = alpha / 2");
+    print_target(&p, ".EQPY 12 EQPY");
+    print_target(&p, ".EQPY 12 = alpha / 2 .EQPY");
 }
 

@@ -1,23 +1,5 @@
 use std::fmt;
 
-pub enum Target {
-    Equation(Equation),
-    Expr(Box<Expr>),
-}
-
-pub struct Equation {
-    pub lhs: Box<Expr>,
-    pub op: Opcode,
-    pub rhs: Box<Expr>,
-}
-
-type EqTuple = (Box<Expr>,Opcode,Box<Expr>);
-impl From<EqTuple> for Equation {
-    fn from(v: EqTuple) -> Self {
-        Self { lhs: v.0, op: v.1, rhs: v.2 }
-    }
-}
-
 pub enum ExprKind {
     Ident(String),
     UnaryOp(Opcode, Box<Expr>),
@@ -89,18 +71,6 @@ impl fmt::Display for Expr {
                 )
             },
         }
-    }
-}
-
-impl fmt::Display for Equation {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {} {}", &self.lhs, &self.op, &self.rhs)
-    }
-}
-
-impl fmt::Display for Target {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", &self)
     }
 }
 
