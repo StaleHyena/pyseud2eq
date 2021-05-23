@@ -92,6 +92,13 @@ fn paren() {
 }
 
 #[test]
+fn visible_paren() {
+    let p = pyseud2eqn::ExprParser::new();
+    assert!(p.parse("((2_2))").unwrap().to_string()
+                 == "{ ( 2_2 ) }");
+}
+
+#[test]
 fn equations() {
     let p = pyseud2eqn::EquationParser::new();
     assert!(p.parse("0 = 0").unwrap().to_string()
@@ -102,8 +109,6 @@ fn equations() {
                  == "pi != tau over 4");
     assert!(p.parse("0 <= 1").unwrap().to_string()
                  == "0 <= 1");
-    assert!(p.parse("0 < 1 < 10 < 100 != 12").unwrap().to_string()
-                 == "0 < 1 < 10 < 100 != 12");
 }
 
 #[test]

@@ -1,14 +1,29 @@
-use crate::ast::{Expr, ExprKind, Opcode};
+use crate::ast::{Target, ExprSet, Expr, ExprKind, Opcode};
 
 grammar;
 
+Marker = r"[\.\s](?i)EQPY";
+pub Target: Target = {
+	Marker <e:Expr> Marker => Target::Expr(e),
+	Marker <eq:Equation> Marker => Target::Expr(eq),
+	Marker <set:ExprSet> Marker => Target::ExprSet(set),
+};
+
+pub ExprSet: ExprSet = {
+	<Expr> ";" <Expr> => ExprSet(vec![<>]),
+	<mut set:ExprSet> ";" <e:Expr> => {
+		set.push(e);
+		set
+	},
+};
+
 pub Equation: Box<Expr> = {
-	Equation EquationOp Expr => Box::new(Expr { v: ExprKind::BinaryOp(<>), l: 0 }),
-	Expr,
+	Expr EquationOp Expr => Box::new(Expr::new(ExprKind::BinaryOp(<>), 0)),
 };
 
 pub EquationOp: Opcode = {
 	"=" => Opcode::Equals,
+	"~=" => Opcode::AboutEquals,
 	"!=" => Opcode::NotEquals,
 	">" => Opcode::GreaterThan,
 	"<" => Opcode::LesserThan,
@@ -17,14 +32,9 @@ pub EquationOp: Opcode = {
 };
 
 pub Expr: Box<Expr> = {
-	Expr ExprOp Factor => Box::new(Expr { v: ExprKind::BinaryOp(<>), l: 0 }),
-	ExprOp Factor => Box::new(Expr { v: ExprKind::UnaryOp(<>), l: 0 }),
+	Expr ExprOp Factor => Box::new(Expr::new(ExprKind::BinaryOp(<>), 0)),
+	ExprOp Factor => Box::new(Expr::new(ExprKind::UnaryOp(<>), 0)),
 	Factor,
-};
-
-Marker = r"[\.\s](?i)EQPY";
-pub Target: String = {
-	Marker <Equation> Marker => (<>).to_string(),
 };
 
 ExprOp: Opcode = {
@@ -33,7 +43,7 @@ ExprOp: Opcode = {
 };
 
 Factor: Box<Expr> = {
-	Factor FactorOp Term => Box::new(Expr { v: ExprKind::BinaryOp(<>), l: 0, }),
+	Factor FactorOp Term => Box::new(Expr::new(ExprKind::BinaryOp(<>), 0)),
 	Term,
 };
 
@@ -46,23 +56,20 @@ FactorOp: Opcode = {
 };
 
 Term: Box<Expr> = {
-	Ident => Box::new(Expr {
-		v: ExprKind::Ident(<>),
-		l: 0,
-	}),
-	"(" <Expr> ")" => {
-		Box::new(Expr {
-			v: (<>).v,
-			l: (<>).l + 1,
-		})
+	Ident => Box::new(Expr::new(ExprKind::Ident(<>), 0)),
+	"(" <e:Expr> ")" => Box::new(Expr::new(e.v, e.prio + 1)),
+	<l:Term> <r:Ident> => {
+		let mut s = l.v.to_string();
+		s.push_str(r.to_string().as_str());
+		Box::new(Expr::new(ExprKind::Ident(s), l.prio))
 	},
 };
 
 Ident: String = {
-	Name => (<>).to_owned(),
+	<n:Name> => n.to_owned(),
 	// Slight bug with the signs
-	Name "." Name => format!("{}{}{}", <>),
-	Name Name => format!("{} {}", <>),
+	Name "." Name => [<>].concat(),
+	<Name> " " <Name> => [<>].concat(),
 };
 
 Name: &'input str = r#"[[[:alnum:]]|['"\^\~%@`\&\?!\[\]`\&]]+"#;
