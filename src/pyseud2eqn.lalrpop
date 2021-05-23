@@ -23,6 +23,7 @@ pub FinalExpr: Box<Expr> = {
 
 pub Equation: Box<Expr> = {
 	Expr EquationOp Expr => Box::new(Expr::new(ExprKind::BinaryOp(<>), 0)),
+	Equation EquationOp Expr => Box::new(Expr::new(ExprKind::BinaryOp(<>), 0)),
 };
 
 pub EquationOp: Opcode = {

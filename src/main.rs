@@ -116,6 +116,10 @@ fn equations() {
                  == "pi != tau over 4");
     assert!(p.parse("0 <= 1").unwrap().to_string()
                  == "0 <= 1");
+    assert!(p.parse("0 <= 1 > -2 ~= -1.9").unwrap().to_string()
+                 == "0 <= 1 > -2 ~= -1.9");
+    assert!(p.parse("0 = 0 = (0) != 1 != 12").unwrap().to_string()
+                 == "0 = 0 = { 0 } != 1 != 12");
 }
 
 #[test]
@@ -126,6 +130,7 @@ fn equation_sets() {
                  == "0 = 0; ~~~ 1 ~= 0; ~~~ ");
     assert!(p.parse("2 < 6; abc ~= bcd; 12; (e)e != E0").unwrap().to_string()
                  == "2 < 6; ~~~ abc ~= bcd; ~~~ 12; ~~~ { ee } != E0; ~~~ ");
+    // FIXME cover multiple expression equations in a set
 }
 
 #[test]
