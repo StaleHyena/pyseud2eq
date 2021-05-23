@@ -5,6 +5,7 @@ use regex::Regex;
 
 mod ast;
 
+#[allow(unused)]
 fn print_target(parser: &pyseud2eqn::TargetParser, v: &str) {
     println!("{}", parser.parse(v).unwrap());
 }
@@ -89,13 +90,19 @@ fn paren() {
                  == "301 over { pi over tau }");
     assert!(p.parse("((-87+78)**(1/omega))/(alpha_1)__45").unwrap().to_string()
                  == "{ { -87 + 78 } sup { 1 over omega } } over { alpha sub 1 } sup 45");
+    // FIXME cover a(b), (a)b and other variations on parenthesis inside terms/idents
 }
 
 #[test]
 fn visible_paren() {
     let p = pyseud2eqn::ExprParser::new();
     assert!(p.parse("((2_2))").unwrap().to_string()
-                 == "{ ( 2_2 ) }");
+                 == "{ ( 2 sub 2 ) }");
+    assert!(p.parse("((((2**2))))").unwrap().to_string()
+                 == "{ ( 2 sup 2 ) }");
+    // FIXME wrong behaviour
+    assert!(p.parse("((2) 8)").unwrap().to_string()
+                 == "{ { 2 } 8 }");
 }
 
 #[test]
@@ -109,6 +116,16 @@ fn equations() {
                  == "pi != tau over 4");
     assert!(p.parse("0 <= 1").unwrap().to_string()
                  == "0 <= 1");
+}
+
+#[test]
+fn equation_sets() {
+    let p = pyseud2eqn::ExprSetParser::new();
+
+    assert!(p.parse("0 = 0; 1 ~= 0").unwrap().to_string()
+                 == "0 = 0; ~~~ 1 ~= 0; ~~~ ");
+    assert!(p.parse("2 < 6; abc ~= bcd; 12; (e)e != E0").unwrap().to_string()
+                 == "2 < 6; ~~~ abc ~= bcd; ~~~ 12; ~~~ { ee } != E0; ~~~ ");
 }
 
 #[test]
