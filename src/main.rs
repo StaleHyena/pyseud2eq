@@ -33,7 +33,13 @@ fn main() -> std::io::Result<()> {
     for line in reader.lines() {
         if let Ok(line) = line {
             if prefix.is_match(line.as_str()) {
-                println!(".EQ\n{}\n.EN", parser.parse(line.as_str()).expect("Invalid input"));
+                match parser.parse(line.as_str()) {
+                    Ok(r) => println!(".EQ\n{}\n.EN", r),
+                    Err(e) => {
+                        println!(".LP\nInvalid EQ");
+                        eprintln!("{}", e);
+                    }
+                }
             } else {
                 println!("{}", line);
             }
@@ -109,17 +115,17 @@ fn visible_paren() {
 fn equations() {
     let p = pyseud2eqn::EquationParser::new();
     assert!(p.parse("0 = 0").unwrap().to_string()
-                 == "0 = 0");
-    assert!(p.parse("X__' = Y__'").unwrap().to_string()
-                 == "X sup ' = Y sup '");
+                 == "{ 0 = 0 }");
+    assert!(p.parse("X__'= Y__'").unwrap().to_string()
+                 == "{ X sup ' = Y sup ' }");
     assert!(p.parse("pi != tau/4").unwrap().to_string()
-                 == "pi != tau over 4");
+                 == "{ pi != tau over 4 }");
     assert!(p.parse("0 <= 1").unwrap().to_string()
-                 == "0 <= 1");
+                 == "{ 0 <= 1 }");
     assert!(p.parse("0 <= 1 > -2 ~= -1.9").unwrap().to_string()
-                 == "0 <= 1 > -2 ~= -1.9");
+                 == "{ 0 <= 1 > -2 approx~ -1.9 }");
     assert!(p.parse("0 = 0 = (0) != 1 != 12").unwrap().to_string()
-                 == "0 = 0 = { 0 } != 1 != 12");
+                 == "{ 0 = 0 = { 0 } != 1 != 12 }");
 }
 
 #[test]
@@ -127,9 +133,9 @@ fn equation_sets() {
     let p = pyseud2eqn::ExprSetParser::new();
 
     assert!(p.parse("0 = 0; 1 ~= 0").unwrap().to_string()
-                 == "0 = 0; ~~~ 1 ~= 0; ~~~ ");
+                 == "{ 0 = 0 }; ~~~ { 1 approx~ 0 }; ~~~ ");
     assert!(p.parse("2 < 6; abc ~= bcd; 12; (e)e != E0").unwrap().to_string()
-                 == "2 < 6; ~~~ abc ~= bcd; ~~~ 12; ~~~ { ee } != E0; ~~~ ");
+                 == "{ 2 < 6 }; ~~~ { abc approx~ bcd }; ~~~ 12; ~~~ { { e e } != E0 }; ~~~ ");
     // FIXME cover multiple expression equations in a set
 }
 

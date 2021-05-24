@@ -22,13 +22,16 @@ pub FinalExpr: Box<Expr> = {
 }
 
 pub Equation: Box<Expr> = {
-	Expr EquationOp Expr => Box::new(Expr::new(ExprKind::BinaryOp(<>), 0)),
-	Equation EquationOp Expr => Box::new(Expr::new(ExprKind::BinaryOp(<>), 0)),
+	Expr EquationOp Expr => Box::new(Expr::new(ExprKind::BinaryOp(<>), 1)),
+	<mut l:Equation> <o:EquationOp> <r:Expr> => {
+		l.prio = 0;
+		Box::new(Expr::new(ExprKind::BinaryOp(<>), 1))
+	},
 };
 
 pub EquationOp: Opcode = {
 	"=" => Opcode::Equals,
-	"~=" => Opcode::AboutEquals,
+	"~=" => Opcode::ApproxEquals,
 	"!=" => Opcode::NotEquals,
 	">" => Opcode::GreaterThan,
 	"<" => Opcode::LesserThan,
@@ -65,9 +68,17 @@ Term: Box<Expr> = {
 	"(" <e:Expr> ")" => Box::new(Expr::new(e.v, e.prio + 1)),
 	<l:Term> <r:Ident> => {
 		let mut s = l.v.to_string();
+		s.push_str(" ");
 		s.push_str(r.to_string().as_str());
 		Box::new(Expr::new(ExprKind::Ident(s), l.prio))
 	},
+	<l:Term> "(" <r:Term> ")" => {
+		let mut s = l.v.to_string();
+		s.push_str(" ( ");
+		s.push_str(r.to_string().as_str());
+		s.push_str(" )");
+		Box::new(Expr::new(ExprKind::Ident(s), l.prio))
+	}
 };
 
 Ident: String = {
