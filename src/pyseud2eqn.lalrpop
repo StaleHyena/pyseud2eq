@@ -72,8 +72,9 @@ Term: Box<Expr> = {
 		s.push_str(r.to_string().as_str());
 		Box::new(Expr::new(ExprKind::Ident(s), l.prio))
 	},
-	<l:Term> "(" <r:Term> ")" => {
+	<l:Term> "(" <mut r:Expr> ")" => {
 		let mut s = l.v.to_string();
+		r.prio += 1;
 		s.push_str(" ( ");
 		s.push_str(r.to_string().as_str());
 		s.push_str(" )");
