@@ -1,11 +1,12 @@
-use crate::ast::{Target, ExprSet, Expr, ExprKind, Opcode};
+use crate::ast::{Target, ExprSet, Expr, ExprKind, Value, Opcode, Scope};
+use std::str::FromStr;
+use lalrpop_util::ParseError;
 
-grammar;
+grammar(scope: &mut Scope);
 
-Marker = r"[\.\s](?i)EQPY";
 pub Target: Target = {
-	Marker <e:FinalExpr> Marker => Target::Expr(e),
-	Marker <set:ExprSet> Marker => Target::ExprSet(set),
+	<e:FinalExpr> => Target::Expr(e),
+	<set:ExprSet> => Target::ExprSet(set),
 };
 
 pub ExprSet: ExprSet = {
@@ -64,28 +65,26 @@ FactorOp: Opcode = {
 };
 
 Term: Box<Expr> = {
-	Ident => Box::new(Expr::new(ExprKind::Ident(<>), 0)),
+	Value => Box::new(Expr::new(ExprKind::Value(<>), 0)),
 	"(" <e:Expr> ")" => Box::new(Expr::new(e.v, e.prio + 1)),
-	<l:Term> <r:Ident> => {
-		let mut s = l.v.to_string();
-		s.push_str(" ");
-		s.push_str(r.to_string().as_str());
-		Box::new(Expr::new(ExprKind::Ident(s), l.prio))
-	},
-	<l:Term> "(" <mut r:Expr> ")" => {
-		let mut s = l.v.to_string();
-		r.prio += 1;
-		s.push_str(" ( ");
-		s.push_str(r.to_string().as_str());
-		s.push_str(" )");
-		Box::new(Expr::new(ExprKind::Ident(s), l.prio))
+	<fname:Name> "(" <mut fargs:Expr> ")" => {
+		let s = fname.to_owned();
+		fargs.prio += 1;
+		Box::new(Expr::new(ExprKind::Function(s,fargs), 0))
 	}
 };
 
-Ident: String = {
-	<n:Name> => n.to_owned(),
-	Name "." Name => [<>].concat(),
+Value: Box<Value> = {
+	<Name> => Box::new(Value::new(<>.to_owned(), None, None)),
+	<FloatU> => Box::new(Value::new((<>.0).to_string(), Some(<>.0), <>.1)),
 };
 
-Name: &'input str = r#"[[[:alnum:]]|['"\^\~%@`\&\?!\[\]`\&]]+"#;
+FloatU: (f64, Option<String>) = {
+  <n:Float> ":" "(" <u:Expr> ")" => (n, Some(u.to_string().to_owned())),
+  <Float> => (<>, None),
+};
+//Name: &'input str = r#"[[:alpha:]]([[:alpha:]]|['"\^\~%@`\&\?!\[\]`°µ])*"#;
+Name: &'input str = r#"[\S--[[0-9]._\+\-\*/=!\~():]][\S--[_\+\-\*/=!\~():]]*"#;
+Float: f64 = r#"[+-]?([0-9]*[.])?[0-9]+([eE][+-]?[0-9]+)?"# =>? f64::from_str(<>)
+  .map_err(|_| ParseError::User { error: "Couldn't parse float value!" });
 

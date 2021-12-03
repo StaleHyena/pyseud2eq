@@ -1,6 +1,6 @@
 [package]
 name = "pyseud2eq"
-version = "1.0.0"
+version = "2.0.0"
 authors = ["stale <redkugelblitzin@gmail.com>"]
 edition = "2018"
 
