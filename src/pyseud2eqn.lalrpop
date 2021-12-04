@@ -23,10 +23,9 @@ pub FinalExpr: Box<Expr> = {
 }
 
 pub Equation: Box<Expr> = {
-	Expr EquationOp Expr => Box::new(Expr::new(ExprKind::BinaryOp(<>), 1)),
-	<mut l:Equation> <o:EquationOp> <r:Expr> => {
-		l.prio = 0;
-		Box::new(Expr::new(ExprKind::BinaryOp(<>), 1))
+	Expr EquationOp Expr => Box::new(Expr::new(ExprKind::BinaryOp(<>), None)),
+	<l:Equation> <o:EquationOp> <r:Expr> => {
+		Box::new(Expr::new(ExprKind::BinaryOp(<>), None))
 	},
 };
 
@@ -41,21 +40,23 @@ pub EquationOp: Opcode = {
 };
 
 pub Expr: Box<Expr> = {
-	Expr ExprOp Factor => Box::new(Expr::new(ExprKind::BinaryOp(<>), 0)),
-	ExprOp Factor => Box::new(Expr::new(ExprKind::UnaryOp(<>), 0)),
+	Expr ExprOp Factor => Box::new(Expr::new(ExprKind::BinaryOp(<>), None)),
+	ExprOp Factor => Box::new(Expr::new(ExprKind::UnaryOp(<>), None)),
 	Factor,
 };
 
 ExprOp: Opcode = {
 	"+" => Opcode::Add,
 	"-" => Opcode::Sub,
+  "@" => Opcode::At,
 };
 
 Factor: Box<Expr> = {
-	Factor FactorOp Term => Box::new(Expr::new(ExprKind::BinaryOp(<>), 0)),
-	Term,
+	Factor FactorOp UTerm => Box::new(Expr::new(ExprKind::BinaryOp(<>), None)),
+	UTerm,
 };
 
+// TODO/FIXME: sup/subscript should have greater precedence
 FactorOp: Opcode = {
 	"**" => Opcode::Superscript,
 	"__" => Opcode::Superscript,
@@ -64,27 +65,36 @@ FactorOp: Opcode = {
 	"/"  => Opcode::Div,
 };
 
+UTerm: Box<Expr> = {
+  <mut v:Term> ":" "(" <u:Expr> ")" => {
+    v.unit = Some(u.to_string().to_owned());
+    v
+  },
+  Term,
+};
+
 Term: Box<Expr> = {
-	Value => Box::new(Expr::new(ExprKind::Value(<>), 0)),
-	"(" <e:Expr> ")" => Box::new(Expr::new(e.v, e.prio + 1)),
-	<fname:Name> "(" <mut fargs:Expr> ")" => {
+	Value => Box::new(Expr::new(ExprKind::Value(<>), None)),
+	"(" <e:Expr> ")" => Box::new(Expr::new(e.v, e.unit)),
+	<fname:Name> "(" <fargs:Expr> ")" => {
 		let s = fname.to_owned();
-		fargs.prio += 1;
-		Box::new(Expr::new(ExprKind::Function(s,fargs), 0))
-	}
+		Box::new(Expr::new(ExprKind::Function(s,fargs), None))
+	},
+  // Botch for indexing
+  <mut t:Term> <idx:r"\[[0-9]+\]"> => {
+    let mut s: String = t.v.to_string().to_owned();
+    s.push_str(idx);
+    t.v = ExprKind::Value(Box::new(Value::new(s, None)));
+    t
+  },
 };
 
 Value: Box<Value> = {
-	<Name> => Box::new(Value::new(<>.to_owned(), None, None)),
-	<FloatU> => Box::new(Value::new((<>.0).to_string(), Some(<>.0), <>.1)),
+	<Name> => Box::new(Value::new(<>.to_owned(), None)),
+	<Float> => Box::new(Value::new(<>.to_string(), None)),
 };
 
-FloatU: (f64, Option<String>) = {
-  <n:Float> ":" "(" <u:Expr> ")" => (n, Some(u.to_string().to_owned())),
-  <Float> => (<>, None),
-};
-//Name: &'input str = r#"[[:alpha:]]([[:alpha:]]|['"\^\~%@`\&\?!\[\]`°µ])*"#;
-Name: &'input str = r#"[\S--[[0-9]._\+\-\*/=!\~():]][\S--[_\+\-\*/=!\~():]]*"#;
+Name: &'input str = r#"[\S--[[0-9]._\+\-\*/=!\~():\[\]]][\S--[_\+\-\*/=!\~():\[\]]]*"#;
 Float: f64 = r#"[+-]?([0-9]*[.])?[0-9]+([eE][+-]?[0-9]+)?"# =>? f64::from_str(<>)
   .map_err(|_| ParseError::User { error: "Couldn't parse float value!" });
 

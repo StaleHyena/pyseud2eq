@@ -50,28 +50,23 @@ pub enum ExprKind {
 
 pub struct Expr {
     pub v: ExprKind,
-    pub prio: usize,
+    pub unit: Option<String>,
 }
 
 impl Expr {
-    pub fn new(v: ExprKind, prio: usize) -> Self {
-        Expr { v, prio }
+    pub fn new(v: ExprKind, unit: Option<String>) -> Self {
+        Expr { v, unit }
     }
 }
 
 pub struct Value {
     pub text: String,
     pub num_val: Option<f64>,
-    pub unit: Option<String>,
 }
 
 impl Value {
-    pub fn new(text: String, num_val: Option<f64>, unit: Option<String>) -> Self {
-        Value {
-            text,
-            num_val,
-            unit,
-        }
+    pub fn new(text: String, num_val: Option<f64>) -> Self {
+        Value { text, num_val }
     }
 }
 
@@ -81,6 +76,7 @@ pub enum Opcode {
     Sub,
     Mul,
     Div,
+    At,
     Subscript,
     Superscript,
     Equals,
@@ -110,6 +106,7 @@ impl fmt::Display for Opcode {
             Sub => "-",
             Mul => "times",
             Div => "over",
+            At => "@",
             Subscript => "sub",
             Superscript => "sup",
             Equals => "=",
@@ -129,7 +126,7 @@ impl fmt::Display for ExprKind {
         use ExprKind::*;
         match &self {
             Value(v) => write!(f, "{}", v),
-            Function(n, a) => write!(f, "{} {{ {} }}", n, a),
+            Function(n, a) => write!(f, "{} ( {} )", n, a),
             UnaryOp(o, v) => write!(f, "{}{{ {} }}", o, v),
             BinaryOp(l, o, r) => write!(f, "{{ {} }} {} {{ {} }}", l, o, r),
         }
@@ -138,11 +135,10 @@ impl fmt::Display for ExprKind {
 
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let inner = self.v.to_string();
-        match self.prio {
-            0 => write!(f, "{}", inner),
-            1 => write!(f, "{{ {} }}", inner),
-            _ => write!(f, "{{ ( {} ) }}", inner),
+        if let Some(unit) = &self.unit {
+            write!(f, "{} {{ {} }}", self.v, unit)
+        } else {
+            write!(f, "{}", self.v)
         }
     }
 }
@@ -156,10 +152,6 @@ impl fmt::Display for ExprSet {
 
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(unit) = &self.unit {
-            write!(f, "{} ~ {}", self.text, unit)
-        } else {
-            write!(f, "{}", self.text)
-        }
+        write!(f, "{}", self.text)
     }
 }
