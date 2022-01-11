@@ -106,6 +106,9 @@ Factor: Box<Expr> = {
 FactorOp: Opcode = {
 	"*"  => Opcode::Mul,
 	"/"  => Opcode::Div,
+	"**" => Opcode::Superscript,
+	"__" => Opcode::Superscript,
+	"_"  => Opcode::Subscript,
 };
 
 pub UTerm: Box<Expr> = {
@@ -121,33 +124,14 @@ Term: Box<Expr> = {
 	<Float> => Box::new(Expr::from(<>)),
 
 	"(" <e:Expr> ")" => Box::new(Expr::new(e.v, e.unit)),
-	<fname:Name> "(" <fargs:Expr> ")" => {
-		let s = fname.to_owned();
-		Box::new(Expr::new(ExprKind::Function(s,fargs), None))
-	},
-  // Botch for indexing
-  <mut t:Term> <idx:r"\[[0-9]+\]"> => {
-    let mut s: String = t.v.to_string().to_owned();
-    s.push_str(idx);
-    t.v = ExprKind::Ident(s);
-    t
-  },
 };
 
 Ident: String = {
-  Name IdentOp Name => format!("{} {} {{ {} }}", <>),
-  Name IdentOp Float => format!("{} {} {{ {} }}", <>),
-  Float IdentOp Name => format!("{} {} {{ {} }}", <>),
-  Float IdentOp Float => format!("{} {} {{ {} }}", <>),
   Name => <>.to_owned(),
+	<fname:Ident> "(" <fargs:Expr> ")" => format!("{}({})", fname, fargs),
+  // Botch for indexing
+  <mut id:Ident> <idx:r"\[[0-9]+\]"> => { id.push_str(idx); id },
 };
-
-IdentOp: Opcode = {
-	"**" => Opcode::Superscript,
-	"__" => Opcode::Superscript,
-	"_"  => Opcode::Subscript,
-};
-
 
 Name: &'input str = r#"[\S--[[0-9]._\+\-\*/=!\~():\[\]]][\S--[_\+\-\*/=!\~():\[\]]]*"#;
 Float: f64 = r#"[+-]?([0-9]*[.])?[0-9]+([eE][+-]?[0-9]+)?"# =>? f64::from_str(<>)
