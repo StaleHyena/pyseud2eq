@@ -29,6 +29,7 @@ fn main() -> std::io::Result<()> {
     for line in reader.lines() {
         if let Ok(line) = line {
             if end.is_match(&line) {
+                s.known.clear();
                 on = false;
             } else if beg.is_match(&line) {
                 on = true;
@@ -45,6 +46,7 @@ fn main() -> std::io::Result<()> {
         }
     }
 
+    eprintln!("known at exit: {:?}", s.known);
     Ok(())
 }
 

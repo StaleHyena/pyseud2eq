@@ -10,8 +10,9 @@ pub enum RepStyle {
 }
 
 pub struct Scope {
-    known: HashMap<String, f64>,
-    repstyle: RepStyle,
+    pub known: HashMap<String, f64>,
+    pub repstyle: RepStyle,
+    pub autocalc_ident: String,
 }
 
 impl Scope {
@@ -19,6 +20,7 @@ impl Scope {
         Self {
             known: HashMap::new(),
             repstyle: RepStyle::SiSuffix,
+            autocalc_ident: "?".to_string(),
         }
     }
 }
@@ -41,13 +43,16 @@ impl ops::DerefMut for ExprSet {
     }
 }
 
+#[derive(Clone)]
 pub enum ExprKind {
-    Value(Box<Value>),
+    Constant(f64),
+    Ident(String),
     Function(String, Box<Expr>),
     UnaryOp(Opcode, Box<Expr>),
     BinaryOp(Box<Expr>, Opcode, Box<Expr>),
 }
 
+#[derive(Clone)]
 pub struct Expr {
     pub v: ExprKind,
     pub unit: Option<String>,
@@ -57,15 +62,22 @@ impl Expr {
     pub fn new(v: ExprKind, unit: Option<String>) -> Self {
         Expr { v, unit }
     }
-    pub fn eval(&self) -> Option<f64> {
+    pub fn eval(&self, scope: &Scope) -> Option<f64> {
         match &self.v {
-            ExprKind::Value(v) => v.num_val,
+            ExprKind::Constant(v) => Some(*v),
+            ExprKind::Ident(name) => {
+                if let Some(val) = scope.known.get(name) {
+                    Some(*val)
+                } else {
+                    None
+                }
+            },
             // TODO, FIXME: Add the basic trig functions to a hardcoded hashmap for now
             ExprKind::Function(_name, _arg) => None,
             ExprKind::UnaryOp(op, e) => {
                 match op {
-                    Opcode::Add => e.eval().map(|v| { v.abs() }),
-                    Opcode::Sub => e.eval().map(|v| { -v.abs() }),
+                    Opcode::Add => e.eval(scope).map(|a| { a.abs() }),
+                    Opcode::Sub => e.eval(scope).map(|a| { -a.abs() }),
                     _ => None,
                 }
             },
@@ -74,15 +86,15 @@ impl Expr {
                     Opcode::At => None,
                     Opcode::Subscript => None,
                     Opcode::Superscript => None,
-                    Opcode::Equals => lhs.eval().or_else(|| { rhs.eval() }),
-                    Opcode::ApproxEquals => lhs.eval().or_else(|| { rhs.eval() }),
+                    Opcode::Equals => rhs.eval(scope).or_else(|| { lhs.eval(scope) }),
+                    Opcode::ApproxEquals => rhs.eval(scope).or_else(|| { lhs.eval(scope) }),
                     Opcode::NotEquals => None,
                     Opcode::GreaterThan => None,
                     Opcode::LesserThan => None,
                     Opcode::GtEquals => None,
                     Opcode::LtEquals => None,
-                    _ => lhs.eval().map(|a| {
-                        rhs.eval().map(|b| {
+                    _ => rhs.eval(scope).map(|b| {
+                        lhs.eval(scope).map(|a| {
                             match op {
                                 Opcode::Add => a + b,
                                 Opcode::Sub => a - b,
@@ -99,22 +111,12 @@ impl Expr {
 }
 impl From<f64> for Expr {
     fn from(val: f64) -> Self {
-        Expr::new(ExprKind::Value(Box::new(Value::new(val.to_string(), Some(val)))), None)
-    }
-}
-
-pub struct Value {
-    pub text: String,
-    pub num_val: Option<f64>,
-}
-
-impl Value {
-    pub fn new(text: String, num_val: Option<f64>) -> Self {
-        Value { text, num_val }
+        Expr::new(ExprKind::Constant(val), None)
     }
 }
 
 // TODO: add more eqn ops
+#[derive(Clone)]
 pub enum Opcode {
     Add,
     Sub,
@@ -169,7 +171,8 @@ impl fmt::Display for ExprKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use ExprKind::*;
         match &self {
-            Value(v) => write!(f, "{}", v),
+            Constant(v) => write!(f, "{}", v),
+            Ident(name) => write!(f, "{}", name),
             Function(n, a) => write!(f, "{} ( {} )", n, a),
             UnaryOp(o, v) => write!(f, "{}{{ {} }}", o, v),
             BinaryOp(l, o, r) => write!(f, "{{ {} }} {} {{ {} }}", l, o, r),
@@ -194,8 +197,3 @@ impl fmt::Display for ExprSet {
     }
 }
 
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.text)
-    }
-}

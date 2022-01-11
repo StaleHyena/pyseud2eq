@@ -1,4 +1,4 @@
-use crate::ast::{Target, ExprSet, Expr, ExprKind, Value, Opcode, Scope};
+use crate::ast::{Target, ExprSet, Expr, ExprKind, Opcode, Scope};
 use std::str::FromStr;
 use lalrpop_util::ParseError;
 
@@ -22,22 +22,57 @@ pub FinalExpr: Box<Expr> = {
 	Equation,
 }
 
+//FIXME dry this code
 pub Equation: Box<Expr> = {
-	Expr EquationOp Expr => Box::new(Expr::new(ExprKind::BinaryOp(<>), None)),
-	<l:Equation> <o:EquationOp> <r:Expr> => {
-		Box::new(Expr::new(ExprKind::BinaryOp(<>), None))
-	},
-  <e:FinalExpr> "?" => {
-    let solved = (*e).eval();
-    Box::new(Expr::new(ExprKind::BinaryOp(e, Opcode::Equals,
-      if let Some(val) = solved {
-        Box::new(Expr::from(val))
-      } else {
-        Box::new(Expr::new(ExprKind::Value(Box::new(Value::new("Couldn't solve!".to_string(),
-        None))), None))
+	<l:Expr> <o:EquationOp> <mut r:Expr> => {
+    use ExprKind::*;
+    if let Ident(rname) = r.v.clone() {
+      if rname == scope.autocalc_ident {
+        if let Some(val) = l.eval(scope) {
+          r.v = Constant(val);
+        } else {
+          r.v = Ident("unknown".to_string());
+        }
       }
-    ), None))
+    }
+    let e = Expr::new(BinaryOp(l.clone(), o, r.clone()), None);
+    if let Some(val) = e.eval(scope) {
+      if let Ident(id) = l.v {
+        scope.known.insert(format!("{}", id), val);
+      }
+      if let Ident(id) = r.v {
+        scope.known.insert(format!("{}", id), val);
+      }
+    }
+    Box::new(e)
   },
+	<eqn:Equation> <o:EquationOp> <mut exp:Expr> => {
+    use ExprKind::*;
+    if let Ident(expname) = exp.v.clone() {
+      if expname == scope.autocalc_ident {
+        if let Some(val) = eqn.eval(scope) {
+          exp.v = Constant(val);
+        } else {
+          exp.v = Ident("unknown".to_string());
+        }
+      }
+    }
+    let e = Expr::new(BinaryOp(eqn.clone(), o, exp.clone()), None);
+    if let BinaryOp(lhs, _, rhs) = eqn.v {
+      if let Some(val) = e.eval(scope) {
+        if let Ident(id) = lhs.v {
+          scope.known.insert(format!("{}", id), val);
+        }
+        if let Ident(id) = rhs.v {
+          scope.known.insert(format!("{}", id), val);
+        }
+        if let Ident(id) = exp.v {
+          scope.known.insert(format!("{}", id), val);
+        }
+      }
+    }
+    Box::new(e)
+  }
 };
 
 pub EquationOp: Opcode = {
@@ -69,9 +104,6 @@ Factor: Box<Expr> = {
 
 // TODO/FIXME: sup/subscript should have greater precedence
 FactorOp: Opcode = {
-	"**" => Opcode::Superscript,
-	"__" => Opcode::Superscript,
-	"_"  => Opcode::Subscript,
 	"*"  => Opcode::Mul,
 	"/"  => Opcode::Div,
 };
@@ -84,9 +116,10 @@ pub UTerm: Box<Expr> = {
   Term,
 };
 
-// TODO, FIXME: Lookup known names for the value in the scope
 Term: Box<Expr> = {
-	Value => Box::new(Expr::new(ExprKind::Value(<>), None)),
+	<Ident> => Box::new(Expr::new(ExprKind::Ident(<>), None)),
+	<Float> => Box::new(Expr::from(<>)),
+
 	"(" <e:Expr> ")" => Box::new(Expr::new(e.v, e.unit)),
 	<fname:Name> "(" <fargs:Expr> ")" => {
 		let s = fname.to_owned();
@@ -96,17 +129,27 @@ Term: Box<Expr> = {
   <mut t:Term> <idx:r"\[[0-9]+\]"> => {
     let mut s: String = t.v.to_string().to_owned();
     s.push_str(idx);
-    t.v = ExprKind::Value(Box::new(Value::new(s, None)));
+    t.v = ExprKind::Ident(s);
     t
   },
 };
 
-Value: Box<Value> = {
-	<Name> => Box::new(Value::new(<>.to_owned(), None)),
-	<Float> => Box::new(Value::new(<>.to_string(), Some(<>))),
+Ident: String = {
+  Name IdentOp Name => format!("{} {} {{ {} }}", <>),
+  Name IdentOp Float => format!("{} {} {{ {} }}", <>),
+  Float IdentOp Name => format!("{} {} {{ {} }}", <>),
+  Float IdentOp Float => format!("{} {} {{ {} }}", <>),
+  Name => <>.to_owned(),
 };
 
-Name: &'input str = r#"[\S--[[0-9]._\+\-\*/=!\~():\[\]\?]][\S--[_\+\-\*/=!\~():\[\]\?]]*"#;
+IdentOp: Opcode = {
+	"**" => Opcode::Superscript,
+	"__" => Opcode::Superscript,
+	"_"  => Opcode::Subscript,
+};
+
+
+Name: &'input str = r#"[\S--[[0-9]._\+\-\*/=!\~():\[\]]][\S--[_\+\-\*/=!\~():\[\]]]*"#;
 Float: f64 = r#"[+-]?([0-9]*[.])?[0-9]+([eE][+-]?[0-9]+)?"# =>? f64::from_str(<>)
   .map_err(|_| ParseError::User { error: "Couldn't parse float value!" });
 
