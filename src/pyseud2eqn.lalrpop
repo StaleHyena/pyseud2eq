@@ -27,6 +27,17 @@ pub Equation: Box<Expr> = {
 	<l:Equation> <o:EquationOp> <r:Expr> => {
 		Box::new(Expr::new(ExprKind::BinaryOp(<>), None))
 	},
+  <e:FinalExpr> "?" => {
+    let solved = (*e).eval();
+    Box::new(Expr::new(ExprKind::BinaryOp(e, Opcode::Equals,
+      if let Some(val) = solved {
+        Box::new(Expr::from(val))
+      } else {
+        Box::new(Expr::new(ExprKind::Value(Box::new(Value::new("Couldn't solve!".to_string(),
+        None))), None))
+      }
+    ), None))
+  },
 };
 
 pub EquationOp: Opcode = {
@@ -65,7 +76,7 @@ FactorOp: Opcode = {
 	"/"  => Opcode::Div,
 };
 
-UTerm: Box<Expr> = {
+pub UTerm: Box<Expr> = {
   <mut v:Term> ":" "(" <u:Expr> ")" => {
     v.unit = Some(u.to_string().to_owned());
     v
@@ -73,6 +84,7 @@ UTerm: Box<Expr> = {
   Term,
 };
 
+// TODO, FIXME: Lookup known names for the value in the scope
 Term: Box<Expr> = {
 	Value => Box::new(Expr::new(ExprKind::Value(<>), None)),
 	"(" <e:Expr> ")" => Box::new(Expr::new(e.v, e.unit)),
@@ -91,10 +103,10 @@ Term: Box<Expr> = {
 
 Value: Box<Value> = {
 	<Name> => Box::new(Value::new(<>.to_owned(), None)),
-	<Float> => Box::new(Value::new(<>.to_string(), None)),
+	<Float> => Box::new(Value::new(<>.to_string(), Some(<>))),
 };
 
-Name: &'input str = r#"[\S--[[0-9]._\+\-\*/=!\~():\[\]]][\S--[_\+\-\*/=!\~():\[\]]]*"#;
+Name: &'input str = r#"[\S--[[0-9]._\+\-\*/=!\~():\[\]\?]][\S--[_\+\-\*/=!\~():\[\]\?]]*"#;
 Float: f64 = r#"[+-]?([0-9]*[.])?[0-9]+([eE][+-]?[0-9]+)?"# =>? f64::from_str(<>)
   .map_err(|_| ParseError::User { error: "Couldn't parse float value!" });
 

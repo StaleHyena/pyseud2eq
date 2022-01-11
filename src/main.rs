@@ -36,8 +36,7 @@ fn main() -> std::io::Result<()> {
                 match parser.parse(&mut s, &line.to_string()) {
                     Ok(r) => println!(".EQ\n{}\n.EN", r),
                     Err(e) => {
-                        println!(".LP\nInvalid EQ");
-                        eprintln!("{}", e);
+                        println!(".LP\nInvalid EQ, {}", e);
                     }
                 }
             } else {

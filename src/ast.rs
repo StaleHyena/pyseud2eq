@@ -57,6 +57,50 @@ impl Expr {
     pub fn new(v: ExprKind, unit: Option<String>) -> Self {
         Expr { v, unit }
     }
+    pub fn eval(&self) -> Option<f64> {
+        match &self.v {
+            ExprKind::Value(v) => v.num_val,
+            // TODO, FIXME: Add the basic trig functions to a hardcoded hashmap for now
+            ExprKind::Function(_name, _arg) => None,
+            ExprKind::UnaryOp(op, e) => {
+                match op {
+                    Opcode::Add => e.eval().map(|v| { v.abs() }),
+                    Opcode::Sub => e.eval().map(|v| { -v.abs() }),
+                    _ => None,
+                }
+            },
+            ExprKind::BinaryOp(lhs, op, rhs) => {
+                match op {
+                    Opcode::At => None,
+                    Opcode::Subscript => None,
+                    Opcode::Superscript => None,
+                    Opcode::Equals => lhs.eval().or_else(|| { rhs.eval() }),
+                    Opcode::ApproxEquals => lhs.eval().or_else(|| { rhs.eval() }),
+                    Opcode::NotEquals => None,
+                    Opcode::GreaterThan => None,
+                    Opcode::LesserThan => None,
+                    Opcode::GtEquals => None,
+                    Opcode::LtEquals => None,
+                    _ => lhs.eval().map(|a| {
+                        rhs.eval().map(|b| {
+                            match op {
+                                Opcode::Add => a + b,
+                                Opcode::Sub => a - b,
+                                Opcode::Mul => a * b,
+                                Opcode::Div => a / b,
+                                _ => f64::NAN,
+                            }
+                        })
+                    }).flatten()
+                }
+            }
+        }
+    }
+}
+impl From<f64> for Expr {
+    fn from(val: f64) -> Self {
+        Expr::new(ExprKind::Value(Box::new(Value::new(val.to_string(), Some(val)))), None)
+    }
 }
 
 pub struct Value {
