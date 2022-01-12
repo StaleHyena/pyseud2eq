@@ -63,14 +63,10 @@ impl Expr {
         Expr { v, unit }
     }
     pub fn eval(&self, scope: &Scope) -> Option<f64> {
-        match &self.v {
+        let retval = match &self.v {
             ExprKind::Constant(v) => Some(*v),
-            ExprKind::Ident(name) => {
-                if let Some(val) = scope.known.get(name) {
-                    Some(*val)
-                } else {
-                    None
-                }
+            ExprKind::Ident(_) => {
+                scope.known.get(format!("{}",&self.v).as_str()).map(|x| *x)
             },
             // TODO, FIXME: Add the basic trig functions to a hardcoded hashmap for now
             ExprKind::Function(_name, _arg) => None,
@@ -84,8 +80,6 @@ impl Expr {
             ExprKind::BinaryOp(lhs, op, rhs) => {
                 match op {
                     Opcode::At => None,
-                    Opcode::Subscript => None,
-                    Opcode::Superscript => None,
                     Opcode::Equals => rhs.eval(scope).or_else(|| { lhs.eval(scope) }),
                     Opcode::ApproxEquals => rhs.eval(scope).or_else(|| { lhs.eval(scope) }),
                     Opcode::NotEquals => None,
@@ -93,20 +87,26 @@ impl Expr {
                     Opcode::LesserThan => None,
                     Opcode::GtEquals => None,
                     Opcode::LtEquals => None,
-                    _ => rhs.eval(scope).map(|b| {
-                        lhs.eval(scope).map(|a| {
-                            match op {
-                                Opcode::Add => a + b,
-                                Opcode::Sub => a - b,
-                                Opcode::Mul => a * b,
-                                Opcode::Div => a / b,
-                                _ => f64::NAN,
-                            }
-                        })
-                    }).flatten()
+                    _ =>
+                        scope.known.get(format!("{}",&self.v).as_str()).map(|x| *x).or_else(|| {
+                            rhs.eval(scope).map(|b| {
+                            lhs.eval(scope).map(|a| {
+                                match op {
+                                    Opcode::Add => a + b,
+                                    Opcode::Sub => a - b,
+                                    Opcode::Mul => a * b,
+                                    Opcode::Div => a / b,
+                                    Opcode::Superscript => a.powf(b),
+                                    _ => f64::NAN,
+                                }
+                            })
+                        }).flatten()
+                    })
                 }
             }
-        }
+        };
+        eprintln!("eval  {} = {:?}", &self.v, retval);
+        retval
     }
 }
 impl From<f64> for Expr {

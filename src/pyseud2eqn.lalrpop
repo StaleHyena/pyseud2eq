@@ -37,11 +37,13 @@ pub Equation: Box<Expr> = {
     }
     let e = Expr::new(BinaryOp(l.clone(), o, r.clone()), None);
     if let Some(val) = e.eval(scope) {
-      if let Ident(id) = l.v {
-        scope.known.insert(format!("{}", id), val);
+      if let None = l.eval(scope) {
+        scope.known.insert(format!("{}", l.v), val);
+        eprintln!("store {} = {}", l.v, val);
       }
-      if let Ident(id) = r.v {
-        scope.known.insert(format!("{}", id), val);
+      if let None = r.eval(scope) {
+        scope.known.insert(format!("{}", r.v), val);
+        eprintln!("store {} = {}", r.v, val);
       }
     }
     Box::new(e)
@@ -123,7 +125,7 @@ Term: Box<Expr> = {
 	<Ident> => Box::new(Expr::new(ExprKind::Ident(<>), None)),
 	<Float> => Box::new(Expr::from(<>)),
 
-	"(" <e:Expr> ")" => Box::new(Expr::new(e.v, e.unit)),
+	"(" <e:Expr> ")" => e,
 };
 
 Ident: String = {
