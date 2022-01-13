@@ -95,6 +95,8 @@ FQIdent: Box<Expr> =
   id
 };
 
+// sub/superscript nesting is now left associative, but it should be right associative
+// need to find a good way to fix this within the constraints of LR(1)
 Ident: Box<Expr> = {
   // FIXME: function calls should be separate from the argument(s)
 	<fname:Ident> "(" <fargs:Expr> ")" => Box::new(Expr::new(ExprKind::Ident(format!("{}({})", fname, fargs)))),
@@ -120,7 +122,7 @@ Name: Box<Expr> = {
   NameChars => Box::new(Expr::new(ExprKind::Ident(<>.to_owned()))),
 }
 
-NameChars: &'input str = r#"[\S--[[0-9]._\+\-\*/=!\~():\[\]]][\S--[_\+\-\*/=!\~():\[\]]]*"#;
-Float: f64 = r#"[+-]?([0-9]*[.])?[0-9]+([eE][+-]?[0-9]+)?"# =>? f64::from_str(<>)
+NameChars: &'input str = r#"[\S--[[0-9]._\+\-\*/=!\~():\[\];]][\S--[_\+\-\*/=!\~():\[\];]]*"#;
+Float: f64 = r#"([0-9]*[.])?[0-9]+([eE][+-]?[0-9]+)?"# =>? f64::from_str(<>)
   .map_err(|_| ParseError::User { error: "Couldn't parse float value!" });
 

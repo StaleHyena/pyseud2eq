@@ -24,43 +24,41 @@ impl Scope {
         }
     }
     pub fn eval(&self, e: &Expr) -> Option<f64> {
-        use ExprKind::*;
+        use { ExprKind::*, Opcode::* };
         match &e.v {
             Constant(v) => Some(*v),
-            Ident(_) => {
-                self.known.get(&e.v.to_string()).map(|x| *x)
+            Ident(name) => {
+                self.known.get(name).map(|x| {
+                    eprintln!("load  {} = {}", name, x);
+                    *x
+                })
             },
             // TODO, FIXME: Add the basic trig functions to a hardcoded hashmap for now
             Function(_name, _arg) => None,
             UnaryOp(op, e) => {
                 match op {
-                    Opcode::Add => self.eval(e).map(|a| { a.abs() }),
-                    Opcode::Sub => self.eval(e).map(|a| { -a.abs() }),
+                    Add => self.eval(e).map(|a| { a.abs() }),
+                    Sub => self.eval(e).map(|a| { -a.abs() }),
                     _ => None,
                 }
             },
             ExprKind::BinaryOp(lhs, op, rhs) => {
-                use Opcode::*;
                 match op {
                     At | NotEquals | GreaterThan | LesserThan | GtEquals | LtEquals => None,
                     Equals | ApproxEquals => self.eval(rhs).or_else(|| { self.eval(lhs) }),
                     _ => {
-                        let lookupval = self.known.get(&e.v.to_string()).map(|x| *x);
-                        eprintln!("lookup {} = {:?}", &e.v.to_string(), lookupval);
-                        lookupval.or_else(|| {
-                            self.eval(rhs).map(|b| {
-                                self.eval(lhs).map(|a| {
-                                    match op {
-                                        Add => a + b,
-                                        Sub => a - b,
-                                        Mul => a * b,
-                                        Div => a / b,
-                                        Pow => a.powf(b),
-                                        _ => f64::NAN,
-                                    }
-                                })
-                            }).flatten()
-                        })
+                        self.eval(rhs).map(|b| {
+                            self.eval(lhs).map(|a| {
+                                match op {
+                                    Add => a + b,
+                                    Sub => a - b,
+                                    Mul => a * b,
+                                    Div => a / b,
+                                    Pow => a.powf(b),
+                                    _ => f64::NAN,
+                                }
+                            })
+                        }).flatten()
                     }
                 }
             }
@@ -78,11 +76,10 @@ impl Scope {
         }
     }
     pub fn store(&mut self, e: &Expr, val: f64) {
-        if let ExprKind::Constant(_) = &e.v {
-            return;
+        if let ExprKind::Ident(name) = &e.v {
+            self.known.insert(name.to_string(), val);
+            eprintln!("store {} = {}", name, val);
         }
-        self.known.insert(e.v.to_string(), val);
-        eprintln!("store {} = {}", e.v.to_string(), val);
     }
 }
 
@@ -128,8 +125,7 @@ impl Expr {
     }
 
     pub fn process(mut self, scope: &mut Scope) -> Self {
-        use ExprKind::*;
-        use Opcode::*;
+        use { ExprKind::*, Opcode::* };
         match &mut self.v {
             BinaryOp(l, o, r) => {
                 if let Ident(lid) = &l.v {
@@ -196,7 +192,7 @@ impl fmt::Display for Target {
 
 impl fmt::Display for Opcode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use self::Opcode::*;
+        use Opcode::*;
         let name: &'static str = match self {
             Add => "+",
             Sub => "-",
@@ -242,8 +238,6 @@ impl fmt::Display for Expr {
 
 impl fmt::Display for ExprSet {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.iter()
-            .fold(Ok(()), |res, e| res.and_then(|_| write!(f, "{}; ~~~ ", e)))
+        write!(f, "{}", self.iter().map(|e| e.to_string()).collect::<Vec<String>>().join("; ~~~ "))
     }
 }
-
