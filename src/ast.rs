@@ -25,7 +25,7 @@ impl Scope {
     }
     pub fn eval(&self, e: &Expr) -> Option<f64> {
         use ExprKind::*;
-        let retval = match &e.v {
+        match &e.v {
             Constant(v) => Some(*v),
             Ident(_) => {
                 self.known.get(&e.v.to_string()).map(|x| *x)
@@ -55,7 +55,7 @@ impl Scope {
                                         Sub => a - b,
                                         Mul => a * b,
                                         Div => a / b,
-                                        Superscript => a.powf(b),
+                                        Pow => a.powf(b),
                                         _ => f64::NAN,
                                     }
                                 })
@@ -64,9 +64,7 @@ impl Scope {
                     }
                 }
             }
-        };
-        eprintln!("eval  {} = {:?}", &e.v, retval);
-        retval
+        }
     }
     pub fn store_op(&mut self, e: &Expr) {
         use ExprKind::*;
@@ -84,6 +82,7 @@ impl Scope {
             return;
         }
         self.known.insert(e.v.to_string(), val);
+        eprintln!("store {} = {}", e.v.to_string(), val);
     }
 }
 
@@ -121,8 +120,11 @@ pub struct Expr {
 }
 
 impl Expr {
-    pub fn new(v: ExprKind, unit: Option<String>) -> Self {
-        Expr { v, unit }
+    pub fn new(v: ExprKind) -> Self {
+        Expr { v, unit: None }
+    }
+    pub fn with_unit(v: ExprKind, unit: String) -> Self {
+        Expr { v, unit: Some(unit) }
     }
 
     pub fn process(mut self, scope: &mut Scope) -> Self {
@@ -158,7 +160,7 @@ impl Expr {
 }
 impl From<f64> for Expr {
     fn from(val: f64) -> Self {
-        Expr::new(ExprKind::Constant(val), None)
+        Expr::new(ExprKind::Constant(val))
     }
 }
 
@@ -169,6 +171,7 @@ pub enum Opcode {
     Sub,
     Mul,
     Div,
+    Pow,
     At,
     Subscript,
     Superscript,
@@ -201,7 +204,7 @@ impl fmt::Display for Opcode {
             Div => "over",
             At => "@",
             Subscript => "sub",
-            Superscript => "sup",
+            Superscript | Pow => "sup",
             Equals => "=",
             ApproxEquals => "~approx~",
             NotEquals => "!=",

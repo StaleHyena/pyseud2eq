@@ -1,4 +1,4 @@
-use crate::ast::{Target, ExprSet, Expr, ExprKind, Opcode, Scope};
+use crate::ast::{Target, ExprSet, Expr, ExprKind, Opcode, Opcode::*, Scope};
 use std::str::FromStr;
 use lalrpop_util::ParseError;
 
@@ -24,46 +24,52 @@ pub FinalExpr: Box<Expr> = {
 
 //FIXME dry this code
 pub Equation: Box<Expr> = {
-	Expr EquationOp Expr => Box::new(Expr::new(ExprKind::BinaryOp(<>), None).process(scope)),
-	Equation EquationOp Expr => Box::new(Expr::new(ExprKind::BinaryOp(<>), None).process(scope)),
+	Expr EquationOp Expr => Box::new(Expr::new(ExprKind::BinaryOp(<>)).process(scope)),
+	Equation EquationOp Expr => Box::new(Expr::new(ExprKind::BinaryOp(<>)).process(scope)),
 };
 
 pub EquationOp: Opcode = {
-	"=" => Opcode::Equals,
-	"~=" => Opcode::ApproxEquals,
-	"!=" => Opcode::NotEquals,
-	">" => Opcode::GreaterThan,
-	"<" => Opcode::LesserThan,
-	">=" => Opcode::GtEquals,
-	"<=" => Opcode::LtEquals,
+	"=" => Equals,
+	"~=" => ApproxEquals,
+	"!=" => NotEquals,
+	">" => GreaterThan,
+	"<" => LesserThan,
+	">=" => GtEquals,
+	"<=" => LtEquals,
 };
 
 pub Expr: Box<Expr> = {
-	Expr ExprOp Factor => Box::new(Expr::new(ExprKind::BinaryOp(<>), None)),
-	ExprOp Factor => Box::new(Expr::new(ExprKind::UnaryOp(<>), None)),
-	Factor,
+	Expr ExprOp FactorLate => Box::new(Expr::new(ExprKind::BinaryOp(<>))),
+	ExprOp FactorLate => Box::new(Expr::new(ExprKind::UnaryOp(<>))),
+	FactorLate,
 };
 
 ExprOp: Opcode = {
-	"+" => Opcode::Add,
-	"-" => Opcode::Sub,
-  "@" => Opcode::At,
+	"+" => Add,
+	"-" => Sub,
+  "@" => At,
 };
 
-Factor: Box<Expr> = {
-	Factor FactorOp UTerm => Box::new(Expr::new(ExprKind::BinaryOp(<>), None)),
-	UTerm,
+FactorLate: Box<Expr> = {
+	FactorLate FactorOpLate FactorEarly => Box::new(Expr::new(ExprKind::BinaryOp(<>))),
+	FactorEarly,
 };
 
-// TODO/FIXME: sup/subscript should have greater precedence
-FactorOp: Opcode = {
-	"*"  => Opcode::Mul,
-	"/"  => Opcode::Div,
-	"**" => Opcode::Superscript,
-	"__" => Opcode::Superscript,
-	"_"  => Opcode::Subscript,
+FactorOpLate: Opcode = {
+	"*"  => Mul,
+	"/"  => Div,
 };
 
+FactorEarly: Box<Expr> = {
+  FactorEarly FactorOpEarly UTerm => Box::new(Expr::new(ExprKind::BinaryOp(<>))),
+  UTerm,
+};
+
+FactorOpEarly: Opcode = {
+	"**" => Pow,
+};
+
+// Term with an unit
 pub UTerm: Box<Expr> = {
   <mut v:Term> ":" "(" <u:Expr> ")" => {
     v.unit = Some(u.to_string().to_owned());
@@ -73,20 +79,48 @@ pub UTerm: Box<Expr> = {
 };
 
 Term: Box<Expr> = {
-	<Ident> => Box::new(Expr::new(ExprKind::Ident(<>), None)),
+	FQIdent,
 	<Float> => Box::new(Expr::from(<>)),
-
-	"(" <e:Expr> ")" => e,
+	"(" <Expr> ")"
 };
 
-Ident: String = {
-  Name => <>.to_owned(),
-	<fname:Ident> "(" <fargs:Expr> ")" => format!("{}({})", fname, fargs),
-  // Botch for indexing
-  <mut id:Ident> <idx:r"\[[0-9]+\]"> => { id.push_str(idx); id },
+// "Fully Qualified", has indexing info too
+FQIdent: Box<Expr> =
+  <mut id:Ident> <idx:r"\[[0-9]+\]"?> => {
+  if let Some(j) = idx {
+    if let ExprKind::Ident(idstr) = &mut id.v {
+      idstr.push_str(j);
+    }
+  }
+  id
 };
 
-Name: &'input str = r#"[\S--[[0-9]._\+\-\*/=!\~():\[\]]][\S--[_\+\-\*/=!\~():\[\]]]*"#;
+Ident: Box<Expr> = {
+  // FIXME: function calls should be separate from the argument(s)
+	<fname:Ident> "(" <fargs:Expr> ")" => Box::new(Expr::new(ExprKind::Ident(format!("{}({})", fname, fargs)))),
+
+  <a:Ident> <op:IdentOp> <b:Name> => {
+    let temp = ExprKind::BinaryOp(a, op, b);
+    Box::new(Expr::new(ExprKind::Ident(temp.to_string())))
+  },
+  <a:Ident> <op:IdentOp> <b:Float> => {
+    let temp = ExprKind::BinaryOp(a, op, Box::new(Expr::from(b)));
+    Box::new(Expr::new(ExprKind::Ident(temp.to_string())))
+  },
+
+  Name
+};
+
+IdentOp: Opcode = {
+	"__" => Superscript,
+	"_"  => Subscript,
+};
+
+Name: Box<Expr> = {
+  NameChars => Box::new(Expr::new(ExprKind::Ident(<>.to_owned()))),
+}
+
+NameChars: &'input str = r#"[\S--[[0-9]._\+\-\*/=!\~():\[\]]][\S--[_\+\-\*/=!\~():\[\]]]*"#;
 Float: f64 = r#"[+-]?([0-9]*[.])?[0-9]+([eE][+-]?[0-9]+)?"# =>? f64::from_str(<>)
   .map_err(|_| ParseError::User { error: "Couldn't parse float value!" });
 
