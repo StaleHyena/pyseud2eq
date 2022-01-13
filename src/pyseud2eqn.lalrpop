@@ -24,57 +24,8 @@ pub FinalExpr: Box<Expr> = {
 
 //FIXME dry this code
 pub Equation: Box<Expr> = {
-	<l:Expr> <o:EquationOp> <mut r:Expr> => {
-    use ExprKind::*;
-    if let Ident(rname) = r.v.clone() {
-      if rname == scope.autocalc_ident {
-        if let Some(val) = l.eval(scope) {
-          r.v = Constant(val);
-        } else {
-          r.v = Ident("unknown".to_string());
-        }
-      }
-    }
-    let e = Expr::new(BinaryOp(l.clone(), o, r.clone()), None);
-    if let Some(val) = e.eval(scope) {
-      if let None = l.eval(scope) {
-        scope.known.insert(format!("{}", l.v), val);
-        eprintln!("store {} = {}", l.v, val);
-      }
-      if let None = r.eval(scope) {
-        scope.known.insert(format!("{}", r.v), val);
-        eprintln!("store {} = {}", r.v, val);
-      }
-    }
-    Box::new(e)
-  },
-	<eqn:Equation> <o:EquationOp> <mut exp:Expr> => {
-    use ExprKind::*;
-    if let Ident(expname) = exp.v.clone() {
-      if expname == scope.autocalc_ident {
-        if let Some(val) = eqn.eval(scope) {
-          exp.v = Constant(val);
-        } else {
-          exp.v = Ident("unknown".to_string());
-        }
-      }
-    }
-    let e = Expr::new(BinaryOp(eqn.clone(), o, exp.clone()), None);
-    if let BinaryOp(lhs, _, rhs) = eqn.v {
-      if let Some(val) = e.eval(scope) {
-        if let Ident(id) = lhs.v {
-          scope.known.insert(format!("{}", id), val);
-        }
-        if let Ident(id) = rhs.v {
-          scope.known.insert(format!("{}", id), val);
-        }
-        if let Ident(id) = exp.v {
-          scope.known.insert(format!("{}", id), val);
-        }
-      }
-    }
-    Box::new(e)
-  }
+	Expr EquationOp Expr => Box::new(Expr::new(ExprKind::BinaryOp(<>), None).process(scope)),
+	Equation EquationOp Expr => Box::new(Expr::new(ExprKind::BinaryOp(<>), None).process(scope)),
 };
 
 pub EquationOp: Opcode = {

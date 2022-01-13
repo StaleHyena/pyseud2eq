@@ -23,6 +23,68 @@ impl Scope {
             autocalc_ident: "?".to_string(),
         }
     }
+    pub fn eval(&self, e: &Expr) -> Option<f64> {
+        use ExprKind::*;
+        let retval = match &e.v {
+            Constant(v) => Some(*v),
+            Ident(_) => {
+                self.known.get(&e.v.to_string()).map(|x| *x)
+            },
+            // TODO, FIXME: Add the basic trig functions to a hardcoded hashmap for now
+            Function(_name, _arg) => None,
+            UnaryOp(op, e) => {
+                match op {
+                    Opcode::Add => self.eval(e).map(|a| { a.abs() }),
+                    Opcode::Sub => self.eval(e).map(|a| { -a.abs() }),
+                    _ => None,
+                }
+            },
+            ExprKind::BinaryOp(lhs, op, rhs) => {
+                use Opcode::*;
+                match op {
+                    At | NotEquals | GreaterThan | LesserThan | GtEquals | LtEquals => None,
+                    Equals | ApproxEquals => self.eval(rhs).or_else(|| { self.eval(lhs) }),
+                    _ => {
+                        let lookupval = self.known.get(&e.v.to_string()).map(|x| *x);
+                        eprintln!("lookup {} = {:?}", &e.v.to_string(), lookupval);
+                        lookupval.or_else(|| {
+                            self.eval(rhs).map(|b| {
+                                self.eval(lhs).map(|a| {
+                                    match op {
+                                        Add => a + b,
+                                        Sub => a - b,
+                                        Mul => a * b,
+                                        Div => a / b,
+                                        Superscript => a.powf(b),
+                                        _ => f64::NAN,
+                                    }
+                                })
+                            }).flatten()
+                        })
+                    }
+                }
+            }
+        };
+        eprintln!("eval  {} = {:?}", &e.v, retval);
+        retval
+    }
+    pub fn store_op(&mut self, e: &Expr) {
+        use ExprKind::*;
+        if let BinaryOp(l,_o,r) = &e.v {
+            if let Some(val) = self.eval(e) {
+                self.store(l, val);
+                self.store(r, val);
+            }
+        } else {
+            panic!("Tried storing {} as a BinaryOp!", e);
+        }
+    }
+    pub fn store(&mut self, e: &Expr, val: f64) {
+        if let ExprKind::Constant(_) = &e.v {
+            return;
+        }
+        self.known.insert(e.v.to_string(), val);
+    }
 }
 
 pub enum Target {
@@ -62,51 +124,36 @@ impl Expr {
     pub fn new(v: ExprKind, unit: Option<String>) -> Self {
         Expr { v, unit }
     }
-    pub fn eval(&self, scope: &Scope) -> Option<f64> {
-        let retval = match &self.v {
-            ExprKind::Constant(v) => Some(*v),
-            ExprKind::Ident(_) => {
-                scope.known.get(format!("{}",&self.v).as_str()).map(|x| *x)
-            },
-            // TODO, FIXME: Add the basic trig functions to a hardcoded hashmap for now
-            ExprKind::Function(_name, _arg) => None,
-            ExprKind::UnaryOp(op, e) => {
-                match op {
-                    Opcode::Add => e.eval(scope).map(|a| { a.abs() }),
-                    Opcode::Sub => e.eval(scope).map(|a| { -a.abs() }),
-                    _ => None,
+
+    pub fn process(mut self, scope: &mut Scope) -> Self {
+        use ExprKind::*;
+        use Opcode::*;
+        match &mut self.v {
+            BinaryOp(l, o, r) => {
+                if let Ident(lid) = &l.v {
+                    if lid.to_string() == scope.autocalc_ident.as_str() {
+                        match scope.eval(r) {
+                            Some(val) => l.v = Constant(val),
+                            None => l.v = Ident("?".to_string()),
+                        }
+                    }
+                }
+                if let Ident(rid) = &r.v {
+                    if rid.to_string() == scope.autocalc_ident.as_str() {
+                        match scope.eval(l) {
+                            Some(val) => r.v = Constant(val),
+                            None => r.v = Ident("?".to_string()),
+                        }
+                    }
+                }
+                match o {
+                    Equals | ApproxEquals => scope.store_op(&self),
+                    _ => (),
                 }
             },
-            ExprKind::BinaryOp(lhs, op, rhs) => {
-                match op {
-                    Opcode::At => None,
-                    Opcode::Equals => rhs.eval(scope).or_else(|| { lhs.eval(scope) }),
-                    Opcode::ApproxEquals => rhs.eval(scope).or_else(|| { lhs.eval(scope) }),
-                    Opcode::NotEquals => None,
-                    Opcode::GreaterThan => None,
-                    Opcode::LesserThan => None,
-                    Opcode::GtEquals => None,
-                    Opcode::LtEquals => None,
-                    _ =>
-                        scope.known.get(format!("{}",&self.v).as_str()).map(|x| *x).or_else(|| {
-                            rhs.eval(scope).map(|b| {
-                            lhs.eval(scope).map(|a| {
-                                match op {
-                                    Opcode::Add => a + b,
-                                    Opcode::Sub => a - b,
-                                    Opcode::Mul => a * b,
-                                    Opcode::Div => a / b,
-                                    Opcode::Superscript => a.powf(b),
-                                    _ => f64::NAN,
-                                }
-                            })
-                        }).flatten()
-                    })
-                }
-            }
-        };
-        eprintln!("eval  {} = {:?}", &self.v, retval);
-        retval
+            _ => (),
+        }
+        self
     }
 }
 impl From<f64> for Expr {
