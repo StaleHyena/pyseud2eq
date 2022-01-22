@@ -4,15 +4,16 @@ lalrpop_mod!(pub pyseud2eqn);
 use regex::Regex;
 use std::io::{self, BufRead, BufReader};
 mod ast;
+use ast::Render;
 
 #[allow(unused)]
 fn print_target(s: &mut ast::Scope, parser: &pyseud2eqn::TargetParser, v: &str) {
-    println!("{}", parser.parse(s, v).unwrap());
+    println!("{}", parser.parse(s, v).unwrap().render(s));
 }
 
 #[allow(unused)]
 fn print_expr(s: &mut ast::Scope, parser: &pyseud2eqn::ExprParser, v: &str) {
-    println!("{}", parser.parse(s, v).unwrap());
+    println!("{}", parser.parse(s, v).unwrap().render(s));
 }
 
 fn main() -> std::io::Result<()> {
@@ -34,7 +35,7 @@ fn main() -> std::io::Result<()> {
                 on = true;
             } else if on && !line.is_empty() {
                 match parser.parse(&mut s, &line.to_string()) {
-                    Ok(r) => println!(".EQ\n{}\n.EN", r),
+                    Ok(r) => println!(".EQ\n{}\n.EN", r.render(&s)),
                     Err(e) => {
                         println!(".LP\nInvalid EQ, {}", e);
                     }
@@ -53,50 +54,50 @@ fn main() -> std::io::Result<()> {
 fn sanity() {
     let mut s = ast::Scope::new();
     let p = pyseud2eqn::ExprParser::new();
-    assert!(p.parse(&mut s, "çæ").unwrap().to_string() == "çæ");
+    assert!(p.parse(&mut s, "çæ").unwrap().render(&s) == "çæ");
     assert!(p.parse(&mut s, "\\|/").is_err());
     assert!(p.parse(&mut s, ",;?").is_err());
-    assert!(p.parse(&mut s, "66").unwrap().to_string() == "66");
-    assert!(p.parse(&mut s, "-12").unwrap().to_string() == "-{ 12 }");
+    assert!(p.parse(&mut s, "66").unwrap().render(&s) == "66");
+    assert!(p.parse(&mut s, "-12").unwrap().render(&s) == "-{ 12 }");
 }
 
 #[test]
 fn factor_ops() {
     let mut s = ast::Scope::new();
     let p = pyseud2eqn::ExprParser::new();
-    assert!(p.parse(&mut s, "26**2").unwrap().to_string() == "{ 26 } sup { 2 }");
+    assert!(p.parse(&mut s, "26**2").unwrap().render(&s) == "{ 26 } sup { 2 }");
     assert!(
-        p.parse(&mut s, "Imp_i__8:(m/s)").unwrap().to_string()
+        p.parse(&mut s, "Imp_i__8:(m/s)").unwrap().render(&s)
             == "{ { Imp } sub { i } } sup { 8 } { { m } over { s } }"
     );
     assert!(
-        p.parse(&mut s, "Shungalung_integ").unwrap().to_string() == "{ Shungalung } sub { integ }"
+        p.parse(&mut s, "Shungalung_integ").unwrap().render(&s) == "{ Shungalung } sub { integ }"
     );
     assert!(
-        p.parse(&mut s, "dododo_final**plus").unwrap().to_string() == "{ { dododo } sub { final } } sup { plus }"
+        p.parse(&mut s, "dododo_final**plus").unwrap().render(&s) == "{ { dododo } sub { final } } sup { plus }"
     );
-    assert!(p.parse(&mut s, "2 / 4 * 12").unwrap().to_string() == "{ { 2 } over { 4 } } times { 12 }");
-    assert!(p.parse(&mut s, "98*0.2/pi").unwrap().to_string() == "{ { 98 } times { 0.2 } } over { pi }");
+    assert!(p.parse(&mut s, "2 / 4 * 12").unwrap().render(&s) == "{ { 2 } over { 4 } } times { 12 }");
+    assert!(p.parse(&mut s, "98*0.2/pi").unwrap().render(&s) == "{ { 98 } times { 0.2 } } over { pi }");
 }
 
 #[test]
 fn expr_ops() {
     let mut s = ast::Scope::new();
     let p = pyseud2eqn::ExprParser::new();
-    assert!(p.parse(&mut s, "1 + ae").unwrap().to_string() == "{ 1 } + { ae }");
-    assert!(p.parse(&mut s, "000 - ooo").unwrap().to_string() == "{ 0 } - { ooo }");
+    assert!(p.parse(&mut s, "1 + ae").unwrap().render(&s) == "{ 1 } + { ae }");
+    assert!(p.parse(&mut s, "000 - ooo").unwrap().render(&s) == "{ 0 } - { ooo }");
 }
 
 #[test]
 fn paren() {
     let mut s = ast::Scope::new();
     let p = pyseud2eqn::ExprParser::new();
-    assert!(p.parse(&mut s, "(45)").unwrap().to_string() == "45");
-    assert!(p.parse(&mut s, "301 / (pi/tau)").unwrap().to_string() == "{ 301 } over { { pi } over { tau } }");
+    assert!(p.parse(&mut s, "(45)").unwrap().render(&s) == "45");
+    assert!(p.parse(&mut s, "301 / (pi/tau)").unwrap().render(&s) == "{ 301 } over { { pi } over { tau } }");
     assert!(
         p.parse(&mut s, "((-87+78)**(1/omega))/(alpha_1)**45")
             .unwrap()
-            .to_string()
+            .render(&s)
             == "{ { { -{ 87 } } + { 78 } } sup { { 1 } over { omega } } } over { { { alpha } sub { 1 } } sup { 45 } }"
     );
     // FIXME cover a(b), (a)b and other variations on parenthesis inside terms/idents
@@ -107,20 +108,20 @@ fn visible_paren() {
     // This feature got removed a while ago, but might come back
     //let mut s = ast::Scope::new();
     //let p = pyseud2eqn::ExprParser::new();
-    //assert!(p.parse(&mut s, "((2_2))").unwrap().to_string() == "{ ( 2 sub 2 ) }");
-    //assert!(p.parse(&mut s, "((((2**2))))").unwrap().to_string() == "{ ( 2 sup 2 ) }");
+    //assert!(p.parse(&mut s, "((2_2))").unwrap().render(&s) == "{ ( 2 sub 2 ) }");
+    //assert!(p.parse(&mut s, "((((2**2))))").unwrap().render(&s) == "{ ( 2 sup 2 ) }");
 }
 
 #[test]
 fn equations() {
     let mut s = ast::Scope::new();
     let p = pyseud2eqn::EquationParser::new();
-    assert!(p.parse(&mut s, "0 = 0").unwrap().to_string() == "{ 0 } = { 0 }");
-    assert!(p.parse(&mut s, "X__'= Y__'").unwrap().to_string() == "{ { X } sup { ' } } = { { Y } sup { ' } }");
-    assert!(p.parse(&mut s, "pi != tau/4").unwrap().to_string() == "{ pi } != { { tau } over { 4 } }");
-    assert!(p.parse(&mut s, "0 <= 1").unwrap().to_string() == "{ 0 } <= { 1 }");
+    assert!(p.parse(&mut s, "0 = 0").unwrap().render(&s) == "{ 0 } = { 0 }");
+    assert!(p.parse(&mut s, "X__'= Y__'").unwrap().render(&s) == "{ { X } sup { ' } } = { { Y } sup { ' } }");
+    assert!(p.parse(&mut s, "pi != tau/4").unwrap().render(&s) == "{ pi } != { { tau } over { 4 } }");
+    assert!(p.parse(&mut s, "0 <= 1").unwrap().render(&s) == "{ 0 } <= { 1 }");
     assert!(
-        p.parse(&mut s, "0 <= 1 > -2 ~= -1.9").unwrap().to_string()
+        p.parse(&mut s, "0 <= 1 > -2 ~= -1.9").unwrap().render(&s)
             //== "{ { 0 } <= { 1 } > { -{ 2 } ~approx~ -{ 1.9 } }" it really should be like this,
             //but not until the equations get unfurled into a vec or something
             == "{ { { 0 } <= { 1 } } > { -{ 2 } } } ~approx~ { -{ 1.9 } }"
@@ -128,7 +129,7 @@ fn equations() {
     assert!(
         p.parse(&mut s, "0 = 0 = (0) != 1 != 12")
             .unwrap()
-            .to_string()
+            .render(&s)
             //== "{ 0 } = { 0 } = { 0 } != { 1 } != { 12 }"
             == "{ { { { 0 } = { 0 } } = { 0 } } != { 1 } } != { 12 }"
     );
@@ -140,13 +141,13 @@ fn equation_sets() {
     let p = pyseud2eqn::ExprSetParser::new();
 
     assert!(
-        p.parse(&mut s, "0 = 0; 1 ~= 0").unwrap().to_string()
+        p.parse(&mut s, "0 = 0; 1 ~= 0").unwrap().render(&s)
             == "{ 0 } = { 0 }; ~~~ { 1 } ~approx~ { 0 }"
     );
     assert!(
         p.parse(&mut s, "2 < 6; abc ~= bcd; 12; e != E0")
             .unwrap()
-            .to_string()
+            .render(&s)
             == "{ 2 } < { 6 }; ~~~ { abc } ~approx~ { bcd }; ~~~ 12; ~~~ { e } != { E0 }"
     );
     // FIXME cover multiple expression equations in a set

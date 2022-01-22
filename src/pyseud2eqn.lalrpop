@@ -1,6 +1,6 @@
-use crate::ast::{Target, ExprSet, Expr, ExprKind, Opcode, Opcode::*, Scope};
+use crate::ast::{Target, ExprSet, Expr, ExprKind, Opcode, Opcode::*, Scope, Render};
+use rug::Float;
 use std::str::FromStr;
-use lalrpop_util::ParseError;
 
 grammar(scope: &mut Scope);
 
@@ -72,7 +72,7 @@ FactorOpEarly: Opcode = {
 // Term with an unit
 pub UTerm: Box<Expr> = {
   <mut v:Term> ":" "(" <u:Expr> ")" => {
-    v.unit = Some(u.to_string().to_owned());
+    v.unit = Some(u.render(scope).to_owned());
     v
   },
   Term,
@@ -80,7 +80,7 @@ pub UTerm: Box<Expr> = {
 
 Term: Box<Expr> = {
 	FQIdent,
-	<Float> => Box::new(Expr::from(<>)),
+	<f:FloatTok> => Box::new(Expr::from(*f)),
 	"(" <Expr> ")"
 };
 
@@ -99,15 +99,15 @@ FQIdent: Box<Expr> =
 // need to find a good way to fix this within the constraints of LR(1)
 Ident: Box<Expr> = {
   // FIXME: function calls should be separate from the argument(s)
-	<fname:Ident> "(" <fargs:Expr> ")" => Box::new(Expr::new(ExprKind::Ident(format!("{}({})", fname, fargs)))),
+	<fname:Ident> "(" <fargs:Expr> ")" => Box::new(Expr::new(ExprKind::Ident(format!("{}({})", fname.render(scope), fargs.render(scope))))),
 
   <a:Ident> <op:IdentOp> <b:Name> => {
     let temp = ExprKind::BinaryOp(a, op, b);
-    Box::new(Expr::new(ExprKind::Ident(temp.to_string())))
+    Box::new(Expr::new(ExprKind::Ident(temp.render(scope))))
   },
-  <a:Ident> <op:IdentOp> <b:Float> => {
-    let temp = ExprKind::BinaryOp(a, op, Box::new(Expr::from(b)));
-    Box::new(Expr::new(ExprKind::Ident(temp.to_string())))
+  <a:Ident> <op:IdentOp> <b:FloatTok> => {
+    let temp = ExprKind::BinaryOp(a, op, Box::new(Expr::from(*b)));
+    Box::new(Expr::new(ExprKind::Ident(temp.render(scope))))
   },
 
   Name
@@ -123,6 +123,6 @@ Name: Box<Expr> = {
 }
 
 NameChars: &'input str = r#"[\S--[[0-9]._\+\-\*/=!\~():\[\];]][\S--[_\+\-\*/=!\~():\[\];]]*"#;
-Float: f64 = r#"([0-9]*[.])?[0-9]+([eE][+-]?[0-9]+)?"# =>? f64::from_str(<>)
-  .map_err(|_| ParseError::User { error: "Couldn't parse float value!" });
+FloatTok: Box<Float> = r#"([0-9]*[.])?[0-9]+([eE][+-]?[0-9]+)?"# =>
+Box::new(Float::with_val(scope.precision,f64::from_str(<>).unwrap()));
 

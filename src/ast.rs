@@ -1,8 +1,10 @@
-use std::collections::hash_map::HashMap;
+use std::collections::HashMap;
 use std::fmt;
 use std::ops;
 use std::vec::Vec;
+use rug::{Float, ops::Pow};
 
+#[derive(Clone, Copy)]
 pub enum RepStyle {
     SiSuffix,
     TenExp,
@@ -10,9 +12,15 @@ pub enum RepStyle {
 }
 
 pub struct Scope {
-    pub known: HashMap<String, f64>,
+    pub known: HashMap<String, Float>,
     pub repstyle: RepStyle,
     pub autocalc_ident: String,
+    pub si_suff_lut: HashMap<i32,(&'static str, &'static str)>,
+    pub precision: u32,
+}
+
+pub trait Render {
+    fn render(&self, scope: &Scope) -> String;
 }
 
 impl Scope {
@@ -21,16 +29,35 @@ impl Scope {
             known: HashMap::new(),
             repstyle: RepStyle::SiSuffix,
             autocalc_ident: "?".to_string(),
+            si_suff_lut: HashMap::from([
+                                       ( 8, ("yotta", "Y")),
+                                       ( 7, ("zetta", "Z")),
+                                       ( 6, ("exa"  , "E")),
+                                       ( 5, ("peta" , "P")),
+                                       ( 4, ("tera" , "T")),
+                                       ( 3, ("giga" , "G")),
+                                       ( 2, ("mega" , "M")),
+                                       ( 1, ("kilo" , "k")),
+                                       (-1, ("milli", "m")),
+                                       (-2, ("micro", "µ")),
+                                       (-3, ("nano" , "n")),
+                                       (-4, ("pico" , "p")),
+                                       (-5, ("femto", "f")),
+                                       (-6, ("atto" , "a")),
+                                       (-7, ("zepto", "z")),
+                                       (-8, ("yocto", "y")),
+            ]),
+            precision: 256,
         }
     }
-    pub fn eval(&self, e: &Expr) -> Option<f64> {
+    pub fn eval(&self, e: &Expr) -> Option<Float> {
         use { ExprKind::*, Opcode::* };
         match &e.v {
-            Constant(v) => Some(*v),
+            Constant(v) => Some(v.clone()),
             Ident(name) => {
                 self.known.get(name).map(|x| {
-                    eprintln!("load  {} = {}", name, x);
-                    *x
+                    eprintln!("load  {} = {}", name, &x);
+                    x.clone()
                 })
             },
             // TODO, FIXME: Add the basic trig functions to a hardcoded hashmap for now
@@ -54,8 +81,8 @@ impl Scope {
                                     Sub => a - b,
                                     Mul => a * b,
                                     Div => a / b,
-                                    Pow => a.powf(b),
-                                    _ => f64::NAN,
+                                    Pow => a.pow(b),
+                                    _ => Float::with_val(rug::float::prec_min(),rug::float::Special::Nan),
                                 }
                             })
                         }).flatten()
@@ -68,16 +95,16 @@ impl Scope {
         use ExprKind::*;
         if let BinaryOp(l,_o,r) = &e.v {
             if let Some(val) = self.eval(e) {
-                self.store(l, val);
-                self.store(r, val);
+                self.store(l, &val);
+                self.store(r, &val);
             }
         } else {
-            panic!("Tried storing {} as a BinaryOp!", e);
+            panic!("Tried storing {} as a BinaryOp!", e.render(&self));
         }
     }
-    pub fn store(&mut self, e: &Expr, val: f64) {
+    pub fn store(&mut self, e: &Expr, val: &Float) {
         if let ExprKind::Ident(name) = &e.v {
-            self.known.insert(name.to_string(), val);
+            self.known.insert(name.to_string(), val.clone());
             eprintln!("store {} = {}", name, val);
         }
     }
@@ -103,7 +130,7 @@ impl ops::DerefMut for ExprSet {
 
 #[derive(Clone)]
 pub enum ExprKind {
-    Constant(f64),
+    Constant(Float),
     Ident(String),
     Function(String, Box<Expr>),
     UnaryOp(Opcode, Box<Expr>),
@@ -154,8 +181,8 @@ impl Expr {
         self
     }
 }
-impl From<f64> for Expr {
-    fn from(val: f64) -> Self {
+impl From<Float> for Expr {
+    fn from(val: Float) -> Self {
         Expr::new(ExprKind::Constant(val))
     }
 }
@@ -178,16 +205,6 @@ pub enum Opcode {
     LesserThan,
     GtEquals,
     LtEquals,
-}
-
-impl fmt::Display for Target {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use Target::*;
-        match &self {
-            ExprSet(set) => write!(f, "{}", set),
-            Expr(e) => write!(f, "{}", e),
-        }
-    }
 }
 
 impl fmt::Display for Opcode {
@@ -213,31 +230,73 @@ impl fmt::Display for Opcode {
     }
 }
 
-impl fmt::Display for ExprKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Render for Target {
+    fn render(&self, scope: &Scope) -> String {
+        use Target::*;
+        match &self {
+            ExprSet(set) => format!("{}", set.render(scope)),
+            Expr(e) => format!("{}", e.render(scope)),
+        }
+    }
+}
+impl Render for ExprKind {
+    fn render(&self, scope: &Scope) -> String {
         use ExprKind::*;
         match &self {
-            Constant(v) => write!(f, "{}", v),
-            Ident(name) => write!(f, "{}", name),
-            Function(n, a) => write!(f, "{} ( {} )", n, a),
-            UnaryOp(o, v) => write!(f, "{}{{ {} }}", o, v),
-            BinaryOp(l, o, r) => write!(f, "{{ {} }} {} {{ {} }}", l, o, r),
+            Constant(v) => {
+                let (nv,s) = style_suffix(&v, scope);
+                format!("{}{}", nv, s.unwrap_or("".to_string()))
+            },
+            Ident(name) => format!("{}", name),
+            Function(n, a) => format!("{} ( {} )", n, a.render(scope)),
+            UnaryOp(o, v) => format!("{}{{ {} }}", o, v.render(scope)),
+            BinaryOp(l, o, r) => format!("{{ {} }} {} {{ {} }}", l.render(scope), o, r.render(scope)),
         }
     }
 }
-
-impl fmt::Display for Expr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Render for Expr {
+    fn render(&self, scope: &Scope) -> String {
         if let Some(unit) = &self.unit {
-            write!(f, "{} {{ {} }}", self.v, unit)
+            format!("{} {{ {} }}", self.v.render(scope), unit)
         } else {
-            write!(f, "{}", self.v)
+            format!("{}", self.v.render(scope))
         }
     }
 }
-
-impl fmt::Display for ExprSet {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.iter().map(|e| e.to_string()).collect::<Vec<String>>().join("; ~~~ "))
+impl Render for ExprSet {
+    fn render(&self, scope: &Scope) -> String {
+        format!("{}", self.iter().map(|e| e.render(scope)).collect::<Vec<String>>().join("; ~~~ "))
     }
 }
+
+fn closest_common_exp(mut val: Float) -> (Float, i32) {
+    let mut n = 0;
+    while val > 100_f64 {
+        val = val / 1000_f64;
+        n += 1;
+    }
+    while val < 1_f64 {
+        val = val * 1000_f64;
+        n -= 1;
+    }
+    (val, n)
+}
+
+fn style_suffix(val: &Float, scope: &Scope) -> (Float, Option<String>) {
+    use RepStyle::*;
+    let (nval, n) = closest_common_exp(val.clone());
+    if n == 0 { return (nval, None) }
+    match scope.repstyle {
+        SiSuffix => {
+            (nval, scope.si_suff_lut.get(&n).map(|x| x.1.to_string()))
+        },
+        TenExp => {
+            (nval, Some(format!(" times 10 sup {{ {} }}", n)))
+        },
+        Scientific => {
+            (nval, Some(format!("e{}", n)))
+        },
+    }
+}
+
+
