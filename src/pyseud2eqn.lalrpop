@@ -1,4 +1,4 @@
-use crate::ast::{Target, ExprSet, Expr, ExprKind, Opcode, Opcode::*, Scope, Render};
+use crate::ast::{Target, ExprSet, Expr, ExprKind, Opcode, Opcode::*, Scope, Render, RepStyle};
 use rug::Float;
 
 grammar(scope: &mut Scope);
@@ -6,6 +6,7 @@ grammar(scope: &mut Scope);
 pub Target: Target = {
 	<e:FinalExpr> => Target::Expr(e),
 	<set:ExprSet> => Target::ExprSet(set),
+  <ConfigComment> => Target::Config,
 };
 
 pub ExprSet: ExprSet = {
@@ -121,9 +122,17 @@ Name: Box<Expr> = {
   NameChars => Box::new(Expr::new(ExprKind::Ident(<>.to_owned()))),
 }
 
-NameChars: &'input str = r#"[\S--[[0-9]._\+\-\*/=!\~():\[\];]][\S--[_\+\-\*/=!\~():\[\];]]*"#;
+NameChars: &'input str = r#"[\S--[[0-9]._\+\-\*/=!\~():\[\];#]][\S--[_\+\-\*/=!\~():\[\];#]]*"#;
 FloatTok: Box<Float> = r#"([0-9]*[.])?[0-9]+([eE][+-]?[0-9]+)?"# => {
   let pval = Float::parse(<>);
   Box::new(Float::with_val(scope.precision,pval.unwrap()))
 };
+
+
+ConfigComment: &'input str = {
+  Comment <"style SI"> => { scope.repstyle = RepStyle::SiSuffix; <> },
+  Comment <"style 10"> => { scope.repstyle = RepStyle::TenExp; <> },
+  Comment <"style e">  => { scope.repstyle = RepStyle::Scientific; <> },
+}
+Comment: &'input str = r#"#"#;
 

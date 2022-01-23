@@ -35,7 +35,12 @@ fn main() -> std::io::Result<()> {
                 on = true;
             } else if on && !line.is_empty() {
                 match parser.parse(&mut s, &line.to_string()) {
-                    Ok(r) => println!(".EQ\n{}\n.EN", r.render(&s)),
+                    Ok(r) => {
+                        let rstr = r.render(&s);
+                        if !rstr.is_empty() {
+                            println!(".EQ\n{}\n.EN", r.render(&s))
+                        }
+                    },
                     Err(e) => {
                         println!(".LP\nInvalid EQ, {}", e);
                     }

@@ -115,6 +115,7 @@ impl Scope {
 pub enum Target {
     ExprSet(ExprSet),
     Expr(Box<Expr>),
+    Config,
 }
 
 pub struct ExprSet(pub Vec<Box<Expr>>);
@@ -238,6 +239,7 @@ impl Render for Target {
         match &self {
             ExprSet(set) => format!("{}", set.render(scope)),
             Expr(e) => format!("{}", e.render(scope)),
+            Config => "".to_string(),
         }
     }
 }
@@ -276,21 +278,22 @@ impl Render for Float {
             if let Some(s) = nvstr.get(..maxidx+1) {
                 nvstr = s.to_string();
             }
-            let trailch: &[_] = &['0','.'];
-            nvstr = nvstr.trim_end_matches(trailch).to_string();
+            nvstr = nvstr.trim_end_matches('0').trim_end_matches('.').to_string();
         }
         format!("{}{}", nvstr, s.unwrap_or("".to_string()))
     }
 }
 
-fn closest_common_exp(mut val: Float) -> (Float, i32) {
+fn closest_common_exp(mut val: Float, e: u32) -> (Float, i32) {
     let mut n = 0;
-    while val > 100_f64 {
-        val = val / 1000_f64;
+    let mut c = Float::with_val(val.prec(), 10);
+    c = c.pow(e);
+    while val > 10_f64.pow((e - 1) as f64) {
+        val = val / &c;
         n += 1;
     }
     while val < 1_f64 {
-        val = val * 1000_f64;
+        val = val * &c;
         n -= 1;
     }
     (val, n)
@@ -298,16 +301,20 @@ fn closest_common_exp(mut val: Float) -> (Float, i32) {
 
 fn style_suffix(val: &Float, scope: &Scope) -> (Float, Option<String>) {
     use RepStyle::*;
-    let (nval, n) = closest_common_exp(val.clone());
-    if n == 0 { return (nval, None) }
     match scope.repstyle {
         SiSuffix => {
+            let (nval, n) = closest_common_exp(val.clone(), 3);
+            if n == 0 { return (nval, None) }
             (nval, scope.si_suff_lut.get(&n).map(|x| x.1.to_string()))
         },
         TenExp => {
+            let (nval, n) = closest_common_exp(val.clone(), 1);
+            if n == 0 { return (nval, None) }
             (nval, Some(format!(" times 10 sup {{ {} }}", n)))
         },
         Scientific => {
+            let (nval, n) = closest_common_exp(val.clone(), 1);
+            if n == 0 { return (nval, None) }
             (nval, Some(format!("e{}", n)))
         },
     }
