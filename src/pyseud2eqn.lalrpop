@@ -6,7 +6,7 @@ grammar(scope: &mut Scope);
 pub Target: Target = {
 	<e:FinalExpr> => Target::Expr(e),
 	<set:ExprSet> => Target::ExprSet(set),
-  <ConfigComment> => Target::Config,
+  ConfigComment => Target::Config,
 };
 
 pub ExprSet: ExprSet = {
@@ -129,10 +129,14 @@ FloatTok: Box<Float> = r#"([0-9]*[.])?[0-9]+([eE][+-]?[0-9]+)?"# => {
 };
 
 
-ConfigComment: &'input str = {
-  Comment <"style SI"> => { scope.repstyle = RepStyle::SiSuffix; <> },
-  Comment <"style 10"> => { scope.repstyle = RepStyle::TenExp; <> },
-  Comment <"style e">  => { scope.repstyle = RepStyle::Scientific; <> },
+ConfigComment: u32 = {
+  Comment "style SI" => { scope.repstyle = RepStyle::SiSuffix; 0 },
+  Comment "style 10" => { scope.repstyle = RepStyle::TenExp; 0 },
+  Comment "style e"  => { scope.repstyle = RepStyle::Scientific; 0 },
+  Comment <r#"digits [0-9]+"#> => {
+    let ns = <>.trim_start_matches("digits ");
+    scope.max_digits_after_zero = ns.parse::<usize>().unwrap(); 0
+  },
 }
 Comment: &'input str = r#"#"#;
 
