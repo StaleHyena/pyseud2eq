@@ -17,6 +17,7 @@ pub struct Scope {
     pub autocalc_ident: String,
     pub si_suff_lut: HashMap<i32,(&'static str, &'static str)>,
     pub precision: u32,
+    pub max_digits_after_zero: usize,
 }
 
 pub trait Render {
@@ -48,6 +49,7 @@ impl Scope {
                                        (-8, ("yocto", "y")),
             ]),
             precision: 256,
+            max_digits_after_zero: 3,
         }
     }
     pub fn eval(&self, e: &Expr) -> Option<Float> {
@@ -245,7 +247,16 @@ impl Render for ExprKind {
         match &self {
             Constant(v) => {
                 let (nv,s) = style_suffix(&v, scope);
-                format!("{}{}", nv, s.unwrap_or("".to_string()))
+                let mut nvstr = nv.to_string_radix_round(10, Some(3*8 + scope.max_digits_after_zero), rug::float::Round::Nearest);
+                if let Some(dotidx) = nvstr.find('.') {
+                    let maxidx = dotidx + scope.max_digits_after_zero;
+                    if let Some(s) = nvstr.get(..maxidx+1) {
+                        nvstr = s.to_string();
+                    }
+                    let trailch: &[_] = &['0','.'];
+                    nvstr = nvstr.trim_end_matches(trailch).to_string();
+                }
+                format!("{}{}", nvstr, s.unwrap_or("".to_string()))
             },
             Ident(name) => format!("{}", name),
             Function(n, a) => format!("{} ( {} )", n, a.render(scope)),
