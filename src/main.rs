@@ -45,8 +45,6 @@ fn main() -> std::io::Result<()> {
             }
         }
     }
-
-    eprintln!("known at exit: {:?}", s.known);
     Ok(())
 }
 

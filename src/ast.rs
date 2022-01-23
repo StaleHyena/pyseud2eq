@@ -58,7 +58,7 @@ impl Scope {
             Constant(v) => Some(v.clone()),
             Ident(name) => {
                 self.known.get(name).map(|x| {
-                    eprintln!("load  {} = {}", name, &x);
+                    //eprintln!("load  {} = {}", name, &x.render(self));
                     x.clone()
                 })
             },
@@ -107,7 +107,7 @@ impl Scope {
     pub fn store(&mut self, e: &Expr, val: &Float) {
         if let ExprKind::Ident(name) = &e.v {
             self.known.insert(name.to_string(), val.clone());
-            eprintln!("store {} = {}", name, val);
+            //eprintln!("store {} = {}", name, val.render(self));
         }
     }
 }
@@ -245,19 +245,7 @@ impl Render for ExprKind {
     fn render(&self, scope: &Scope) -> String {
         use ExprKind::*;
         match &self {
-            Constant(v) => {
-                let (nv,s) = style_suffix(&v, scope);
-                let mut nvstr = nv.to_string_radix_round(10, Some(3*8 + scope.max_digits_after_zero), rug::float::Round::Nearest);
-                if let Some(dotidx) = nvstr.find('.') {
-                    let maxidx = dotidx + scope.max_digits_after_zero;
-                    if let Some(s) = nvstr.get(..maxidx+1) {
-                        nvstr = s.to_string();
-                    }
-                    let trailch: &[_] = &['0','.'];
-                    nvstr = nvstr.trim_end_matches(trailch).to_string();
-                }
-                format!("{}{}", nvstr, s.unwrap_or("".to_string()))
-            },
+            Constant(v) => v.render(scope),
             Ident(name) => format!("{}", name),
             Function(n, a) => format!("{} ( {} )", n, a.render(scope)),
             UnaryOp(o, v) => format!("{}{{ {} }}", o, v.render(scope)),
@@ -277,6 +265,21 @@ impl Render for Expr {
 impl Render for ExprSet {
     fn render(&self, scope: &Scope) -> String {
         format!("{}", self.iter().map(|e| e.render(scope)).collect::<Vec<String>>().join("; ~~~ "))
+    }
+}
+impl Render for Float {
+    fn render(&self, scope: &Scope) -> String {
+        let (nv,s) = style_suffix(&self, scope);
+        let mut nvstr = nv.to_string_radix_round(10, Some(3*8 + scope.max_digits_after_zero), rug::float::Round::Nearest);
+        if let Some(dotidx) = nvstr.find('.') {
+            let maxidx = dotidx + scope.max_digits_after_zero;
+            if let Some(s) = nvstr.get(..maxidx+1) {
+                nvstr = s.to_string();
+            }
+            let trailch: &[_] = &['0','.'];
+            nvstr = nvstr.trim_end_matches(trailch).to_string();
+        }
+        format!("{}{}", nvstr, s.unwrap_or("".to_string()))
     }
 }
 
