@@ -9,6 +9,7 @@ pub enum RepStyle {
     SiSuffix,
     TenExp,
     Scientific,
+    Verbatim,
 }
 
 pub struct Scope {
@@ -286,13 +287,16 @@ impl Render for Float {
 
 fn closest_common_exp(mut val: Float, e: u32) -> (Float, i32) {
     let mut n = 0;
-    let mut c = Float::with_val(val.prec(), 10);
-    c = c.pow(e);
-    while val > 10_f64.pow((e - 1) as f64) {
+    let one = Float::with_val(val.prec(), 1_u32);
+    let e = Float::with_val(val.prec(), e);
+    let c = Float::with_val(val.prec(), e.exp10_ref());
+    let mut a = Float::with_val(val.prec(), &e - &one);
+    a = a.exp10();
+    while val > a {
         val = val / &c;
         n += 1;
     }
-    while val < 1_f64 {
+    while val < one {
         val = val * &c;
         n -= 1;
     }
@@ -316,6 +320,9 @@ fn style_suffix(val: &Float, scope: &Scope) -> (Float, Option<String>) {
             let (nval, n) = closest_common_exp(val.clone(), 1);
             if n == 0 { return (nval, None) }
             (nval, Some(format!("e{}", n)))
+        },
+        Verbatim => {
+            (val.to_owned(), None)
         },
     }
 }

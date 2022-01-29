@@ -107,7 +107,11 @@ Ident: Box<Expr> = {
   },
   <a:Ident> <op:IdentOp> <b:FloatTok> => {
     let temp = ExprKind::BinaryOp(a, op, Box::new(Expr::from(*b)));
-    Box::new(Expr::new(ExprKind::Ident(temp.render(scope))))
+    let sbak = scope.repstyle;
+    scope.repstyle = RepStyle::Verbatim;
+    let r = Box::new(Expr::new(ExprKind::Ident(temp.render(scope))));
+    scope.repstyle = sbak;
+    r
   },
 
   Name
@@ -133,6 +137,7 @@ ConfigComment: u32 = {
   Comment "style SI" => { scope.repstyle = RepStyle::SiSuffix; 0 },
   Comment "style 10" => { scope.repstyle = RepStyle::TenExp; 0 },
   Comment "style e"  => { scope.repstyle = RepStyle::Scientific; 0 },
+  Comment "style v" => { scope.repstyle = RepStyle::Verbatim; 0 },
   Comment <r#"digits [0-9]+"#> => {
     let ns = <>.trim_start_matches("digits ");
     scope.max_digits_after_zero = ns.parse::<usize>().unwrap(); 0
