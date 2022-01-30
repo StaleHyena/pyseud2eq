@@ -24,8 +24,8 @@ pub FinalExpr: Box<Expr> = {
 
 //FIXME dry this code
 pub Equation: Box<Expr> = {
-	Expr EquationOp Expr => Box::new(Expr::new(ExprKind::BinaryOp(<>)).process(scope)),
-	Equation EquationOp Expr => Box::new(Expr::new(ExprKind::BinaryOp(<>)).process(scope)),
+	Expr EquationOp Expr => Box::new(Expr::new(ExprKind::BinaryOp(<>))),
+	Equation EquationOp Expr => Box::new(Expr::new(ExprKind::BinaryOp(<>))),
 };
 
 pub EquationOp: Opcode = {

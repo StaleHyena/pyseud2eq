@@ -4,7 +4,7 @@ lalrpop_mod!(pub pyseud2eqn);
 use regex::Regex;
 use std::io::{self, BufRead, BufReader};
 mod ast;
-use ast::Render;
+use ast::{ Render, Target };
 
 #[allow(unused)]
 fn print_target(s: &mut ast::Scope, parser: &pyseud2eqn::TargetParser, v: &str) {
@@ -25,7 +25,7 @@ fn main() -> std::io::Result<()> {
     let beg = Regex::new(beg_txt).unwrap();
     let end = Regex::new(end_txt).unwrap();
     let mut on = false;
-    let parser = pyseud2eqn::TargetParser::new();
+    let p = pyseud2eqn::TargetParser::new();
     let mut s = ast::Scope::new();
     for line in reader.lines() {
         if let Ok(line) = line {
@@ -34,11 +34,20 @@ fn main() -> std::io::Result<()> {
             } else if beg.is_match(&line) {
                 on = true;
             } else if on && !line.is_empty() {
-                match parser.parse(&mut s, &line.to_string()) {
-                    Ok(r) => {
-                        let rstr = r.render(&s);
-                        if !rstr.is_empty() {
-                            println!(".EQ\n{}\n.EN", r.render(&s))
+                match p.parse(&mut s, &line.to_string()) {
+                    Ok(target) => {
+                        match target {
+                            Target::ExprSet(mut eset) => {
+                                for e in eset.iter_mut() {
+                                    s.process(e, None);
+                                }
+                                println!(".EQ\n{}\n.EN", eset.render(&s));
+                            },
+                            Target::Expr(mut e) => {
+                                s.process(&mut e, None);
+                                println!(".EQ\n{}\n.EN", e.render(&s));
+                            },
+                            Target::Config => (),
                         }
                     },
                     Err(e) => {

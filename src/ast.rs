@@ -59,7 +59,7 @@ impl Scope {
             Constant(v) => Some(v.clone()),
             Ident(name) => {
                 self.known.get(name).map(|x| {
-                    //eprintln!("load  {} = {}", name, &x.render(self));
+                    eprintln!("load  {} = {}", name, &x.render(self));
                     x.clone()
                 })
             },
@@ -94,21 +94,31 @@ impl Scope {
             }
         }
     }
-    pub fn store_op(&mut self, e: &Expr) {
-        use ExprKind::*;
-        if let BinaryOp(l,_o,r) = &e.v {
-            if let Some(val) = self.eval(e) {
-                self.store(l, &val);
-                self.store(r, &val);
-            }
-        } else {
-            panic!("Tried storing {} as a BinaryOp!", e.render(&self));
+    pub fn process(&mut self, e: &mut Expr, val: Option<Float>) {
+        use { ExprKind::*, Opcode::* };
+        match &mut e.v {
+            BinaryOp(l, _, r) => {
+                let lhv = self.eval(l);
+                let rhv = self.eval(r);
+                let sval = rhv.or_else(|| lhv.or_else(|| val));
+                self.process(l, sval.clone());
+                self.process(r, sval);
+            },
+            Ident(name) => {
+                if let Some(v) = val {
+                    if name.to_string() == self.autocalc_ident {
+                        e.v = Constant(v.clone());
+                    }
+                    self.store(&e, &v);
+                }
+            },
+            _ => (),
         }
     }
     pub fn store(&mut self, e: &Expr, val: &Float) {
         if let ExprKind::Ident(name) = &e.v {
             self.known.insert(name.to_string(), val.clone());
-            //eprintln!("store {} = {}", name, val.render(self));
+            eprintln!("store {} = {}", name, val.render(self));
         }
     }
 }
@@ -153,36 +163,6 @@ impl Expr {
     }
     pub fn with_unit(v: ExprKind, unit: String) -> Self {
         Expr { v, unit: Some(unit) }
-    }
-
-    pub fn process(mut self, scope: &mut Scope) -> Self {
-        use { ExprKind::*, Opcode::* };
-        match &mut self.v {
-            BinaryOp(l, o, r) => {
-                if let Ident(lid) = &l.v {
-                    if lid.to_string() == scope.autocalc_ident.as_str() {
-                        match scope.eval(r) {
-                            Some(val) => l.v = Constant(val),
-                            None => l.v = Ident("?".to_string()),
-                        }
-                    }
-                }
-                if let Ident(rid) = &r.v {
-                    if rid.to_string() == scope.autocalc_ident.as_str() {
-                        match scope.eval(l) {
-                            Some(val) => r.v = Constant(val),
-                            None => r.v = Ident("?".to_string()),
-                        }
-                    }
-                }
-                match o {
-                    Equals | ApproxEquals => scope.store_op(&self),
-                    _ => (),
-                }
-            },
-            _ => (),
-        }
-        self
     }
 }
 impl From<Float> for Expr {
