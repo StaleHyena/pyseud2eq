@@ -4,7 +4,7 @@ use std::ops;
 use std::vec::Vec;
 use rug::{Float, ops::Pow};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum RepStyle {
     SiSuffix,
     TenExp,
@@ -16,7 +16,6 @@ pub struct Scope {
     pub known: HashMap<String, Float>,
     pub repstyle: RepStyle,
     pub autocalc_ident: String,
-    pub si_suff_lut: HashMap<i32,(&'static str, &'static str)>,
     pub precision: u32,
     pub max_digits_after_zero: usize,
 }
@@ -31,24 +30,6 @@ impl Scope {
             known: HashMap::new(),
             repstyle: RepStyle::SiSuffix,
             autocalc_ident: "?".to_string(),
-            si_suff_lut: HashMap::from([
-                                       ( 8, ("yotta", "Y")),
-                                       ( 7, ("zetta", "Z")),
-                                       ( 6, ("exa"  , "E")),
-                                       ( 5, ("peta" , "P")),
-                                       ( 4, ("tera" , "T")),
-                                       ( 3, ("giga" , "G")),
-                                       ( 2, ("mega" , "M")),
-                                       ( 1, ("kilo" , "k")),
-                                       (-1, ("milli", "m")),
-                                       (-2, ("micro", "µ")),
-                                       (-3, ("nano" , "n")),
-                                       (-4, ("pico" , "p")),
-                                       (-5, ("femto", "f")),
-                                       (-6, ("atto" , "a")),
-                                       (-7, ("zepto", "z")),
-                                       (-8, ("yocto", "y")),
-            ]),
             precision: 256,
             max_digits_after_zero: 3,
         }
@@ -75,7 +56,7 @@ impl Scope {
             ExprKind::BinaryOp(lhs, op, rhs) => {
                 match op {
                     At | NotEquals | GreaterThan | LesserThan | GtEquals | LtEquals => None,
-                    Equals | ApproxEquals => self.eval(rhs).or_else(|| { self.eval(lhs) }),
+                    o if ASSIGNING_OPS.contains(o) => self.eval(rhs).or_else(|| { self.eval(lhs) }),
                     _ => {
                         self.eval(rhs).map(|b| {
                             self.eval(lhs).map(|a| {
@@ -94,26 +75,30 @@ impl Scope {
             }
         }
     }
-    pub fn process(&mut self, e: &mut Expr, val: Option<Float>) {
-        use { ExprKind::*, Opcode::* };
+    fn process_inner(&mut self, e: &mut Expr, val: Option<&Float>, assign: bool) {
+        use ExprKind::*;
         match &mut e.v {
-            BinaryOp(l, _, r) => {
+            BinaryOp(l, o, r) => {
                 let lhv = self.eval(l);
                 let rhv = self.eval(r);
-                let sval = rhv.or_else(|| lhv.or_else(|| val));
-                self.process(l, sval.clone());
-                self.process(r, sval);
+                let sval = rhv.as_ref().or_else(|| lhv.as_ref().or_else(|| val));
+                let assign = ASSIGNING_OPS.contains(o);
+                self.process_inner(l, sval, assign);
+                self.process_inner(r, sval, assign);
             },
             Ident(name) => {
                 if let Some(v) = val {
                     if name.to_string() == self.autocalc_ident {
                         e.v = Constant(v.clone());
                     }
-                    self.store(&e, &v);
+                    if assign { self.store(&e, &v); }
                 }
             },
             _ => (),
         }
+    }
+    pub fn process(&mut self, e: &mut Expr) {
+        self.process_inner(e, None, false);
     }
     pub fn store(&mut self, e: &Expr, val: &Float) {
         if let ExprKind::Ident(name) = &e.v {
@@ -172,7 +157,7 @@ impl From<Float> for Expr {
 }
 
 // TODO: add more eqn ops
-#[derive(Clone)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Opcode {
     Add,
     Sub,
@@ -190,6 +175,11 @@ pub enum Opcode {
     GtEquals,
     LtEquals,
 }
+
+static ASSIGNING_OPS: &[Opcode] = &[
+    Opcode::Equals,
+    Opcode::ApproxEquals,
+];
 
 impl fmt::Display for Opcode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -217,7 +207,7 @@ impl fmt::Display for Opcode {
 impl Render for Target {
     fn render(&self, scope: &Scope) -> String {
         use Target::*;
-        match &self {
+        match self {
             ExprSet(set) => format!("{}", set.render(scope)),
             Expr(e) => format!("{}", e.render(scope)),
             Config => "".to_string(),
@@ -227,7 +217,7 @@ impl Render for Target {
 impl Render for ExprKind {
     fn render(&self, scope: &Scope) -> String {
         use ExprKind::*;
-        match &self {
+        match self {
             Constant(v) => v.render(scope),
             Ident(name) => format!("{}", name),
             Function(n, a) => format!("{} ( {} )", n, a.render(scope)),
@@ -252,21 +242,39 @@ impl Render for ExprSet {
 }
 impl Render for Float {
     fn render(&self, scope: &Scope) -> String {
-        let (nv,s) = style_suffix(&self, scope);
-        let mut nvstr = nv.to_string_radix_round(10, Some(3*8 + scope.max_digits_after_zero), rug::float::Round::Nearest);
-        if let Some(dotidx) = nvstr.find('.') {
-            let maxidx = dotidx + scope.max_digits_after_zero;
-            if let Some(s) = nvstr.get(..maxidx+1) {
-                nvstr = s.to_string();
-            }
-            nvstr = nvstr.trim_end_matches('0').trim_end_matches('.').to_string();
+        let (val,s,n) = style_suffix(self.clone(), scope.repstyle);
+        let mut vstr = val.to_string_radix_round(10, Some(3*8), rug::float::Round::Nearest);
+
+        if let Some(dotidx) = vstr.find('.') {
+            // this is a mess
+            if let RepStyle::Verbatim = scope.repstyle {
+                vstr.remove(dotidx);
+                let new_dotidx: isize = (dotidx as isize) + (n as isize);
+                match new_dotidx {
+                    n if n <= 0 => {
+                        vstr.insert_str(0, &"0".repeat(n.abs() as usize + 1));
+                        vstr.insert(1, '.');
+                    },
+                    n if n > 0 => {
+                        vstr.insert(n as usize, '.');
+                    },
+                    _ => { unreachable!(); }
+                }
+            } else {
+                let maxidx = dotidx + scope.max_digits_after_zero;
+                if let Some(s) = vstr.get(..=maxidx) {
+                    vstr = s.to_string();
+                }
+            };
+            vstr = vstr.trim_end_matches('0').trim_end_matches('.').to_string();
         }
-        format!("{}{}", nvstr, s.unwrap_or("".to_string()))
+        format!("{}{}", vstr, s.unwrap_or("".to_string()))
     }
 }
 
-fn closest_common_exp(mut val: Float, e: u32) -> (Float, i32) {
-    let mut n = 0;
+fn closest_common_exp(mut val: Float, e: u32) -> (Float, isize) {
+    if val == 0 { return (val, 0) }
+    let mut n = 0_isize;
     let one = Float::with_val(val.prec(), 1_u32);
     let e = Float::with_val(val.prec(), e);
     let c = Float::with_val(val.prec(), e.exp10_ref());
@@ -283,28 +291,48 @@ fn closest_common_exp(mut val: Float, e: u32) -> (Float, i32) {
     (val, n)
 }
 
-fn style_suffix(val: &Float, scope: &Scope) -> (Float, Option<String>) {
+fn style_suffix(val: Float, style: RepStyle) -> (Float, Option<String>, isize) {
     use RepStyle::*;
-    match scope.repstyle {
+    match style {
         SiSuffix => {
             let (nval, n) = closest_common_exp(val.clone(), 3);
-            if n == 0 { return (nval, None) }
-            (nval, scope.si_suff_lut.get(&n).map(|x| x.1.to_string()))
+            if n == 0 { return (nval, None, n) }
+            else if n > 8 || n < -8 {
+                return style_suffix(val, TenExp);
+            }
+            (nval, SI_SUFF_LUT[(n + 8) as usize].map(|x| x.1.to_string()), n)
         },
         TenExp => {
-            let (nval, n) = closest_common_exp(val.clone(), 1);
-            if n == 0 { return (nval, None) }
-            (nval, Some(format!(" times 10 sup {{ {} }}", n)))
+            let (val, n) = closest_common_exp(val, 1);
+            if n == 0 { return (val, None, n) }
+            (val, Some(format!(" times 10 sup {{ {} }}", n)), n)
         },
-        Scientific => {
-            let (nval, n) = closest_common_exp(val.clone(), 1);
-            if n == 0 { return (nval, None) }
-            (nval, Some(format!("e{}", n)))
-        },
-        Verbatim => {
-            (val.to_owned(), None)
+        Scientific | Verbatim => {
+            let (val, n) = closest_common_exp(val, 1);
+            if n == 0 { return (val, None, n) }
+            (val, if style == Verbatim { None } else { Some(format!("e{}", n)) }, n)
         },
     }
 }
 
+static SI_SUFF_LUT: &[Option<(&'static str, &'static str)>] =
+&[
+   Some(("yocto", "y")),
+   Some(("zepto", "z")),
+   Some(("atto" , "a")),
+   Some(("femto", "f")),
+   Some(("pico" , "p")),
+   Some(("nano" , "n")),
+   Some(("micro", "µ")),
+   Some(("milli", "m")),
+   None,
+   Some(("kilo" , "k")),
+   Some(("mega" , "M")),
+   Some(("giga" , "G")),
+   Some(("tera" , "T")),
+   Some(("peta" , "P")),
+   Some(("exa"  , "E")),
+   Some(("zetta", "Z")),
+   Some(("yotta", "Y")),
+];
 

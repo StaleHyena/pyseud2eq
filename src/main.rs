@@ -39,12 +39,12 @@ fn main() -> std::io::Result<()> {
                         match target {
                             Target::ExprSet(mut eset) => {
                                 for e in eset.iter_mut() {
-                                    s.process(e, None);
+                                    s.process(e);
                                 }
                                 println!(".EQ\n{}\n.EN", eset.render(&s));
                             },
                             Target::Expr(mut e) => {
-                                s.process(&mut e, None);
+                                s.process(&mut e);
                                 println!(".EQ\n{}\n.EN", e.render(&s));
                             },
                             Target::Config => (),
@@ -65,6 +65,7 @@ fn main() -> std::io::Result<()> {
 #[test]
 fn sanity() {
     let mut s = ast::Scope::new();
+    s.repstyle = ast::RepStyle::Verbatim;
     let p = pyseud2eqn::ExprParser::new();
     assert!(p.parse(&mut s, "çæ").unwrap().render(&s) == "çæ");
     assert!(p.parse(&mut s, "\\|/").is_err());
@@ -76,6 +77,7 @@ fn sanity() {
 #[test]
 fn factor_ops() {
     let mut s = ast::Scope::new();
+    s.repstyle = ast::RepStyle::Verbatim;
     let p = pyseud2eqn::ExprParser::new();
     assert!(p.parse(&mut s, "26**2").unwrap().render(&s) == "{ 26 } sup { 2 }");
     assert!(
@@ -95,6 +97,7 @@ fn factor_ops() {
 #[test]
 fn expr_ops() {
     let mut s = ast::Scope::new();
+    s.repstyle = ast::RepStyle::Verbatim;
     let p = pyseud2eqn::ExprParser::new();
     assert!(p.parse(&mut s, "1 + ae").unwrap().render(&s) == "{ 1 } + { ae }");
     assert!(p.parse(&mut s, "000 - ooo").unwrap().render(&s) == "{ 0 } - { ooo }");
@@ -103,6 +106,7 @@ fn expr_ops() {
 #[test]
 fn paren() {
     let mut s = ast::Scope::new();
+    s.repstyle = ast::RepStyle::Verbatim;
     let p = pyseud2eqn::ExprParser::new();
     assert!(p.parse(&mut s, "(45)").unwrap().render(&s) == "45");
     assert!(p.parse(&mut s, "301 / (pi/tau)").unwrap().render(&s) == "{ 301 } over { { pi } over { tau } }");
@@ -127,6 +131,7 @@ fn visible_paren() {
 #[test]
 fn equations() {
     let mut s = ast::Scope::new();
+    s.repstyle = ast::RepStyle::Verbatim;
     let p = pyseud2eqn::EquationParser::new();
     assert!(p.parse(&mut s, "0 = 0").unwrap().render(&s) == "{ 0 } = { 0 }");
     assert!(p.parse(&mut s, "X__'= Y__'").unwrap().render(&s) == "{ { X } sup { ' } } = { { Y } sup { ' } }");
@@ -150,6 +155,7 @@ fn equations() {
 #[test]
 fn equation_sets() {
     let mut s = ast::Scope::new();
+    s.repstyle = ast::RepStyle::Verbatim;
     let p = pyseud2eqn::ExprSetParser::new();
 
     assert!(
@@ -168,7 +174,22 @@ fn equation_sets() {
 #[test]
 fn targets() {
     let mut s = ast::Scope::new();
+    s.repstyle = ast::RepStyle::Verbatim;
     let p = pyseud2eqn::TargetParser::new();
     print_target(&mut s, &p, "12");
     print_target(&mut s, &p, "12 = alpha / 2");
+}
+
+#[test]
+fn render_styles() {
+    let mut s = ast::Scope::new();
+    let p = pyseud2eqn::TargetParser::new();
+
+    s.repstyle = ast::RepStyle::SiSuffix;
+    assert!(p.parse(&mut s, "120000").unwrap().render(&s) == "120k");
+    assert!(p.parse(&mut s, "0.999").unwrap().render(&s) == "999m");
+
+    s.repstyle = ast::RepStyle::TenExp;
+    assert!(p.parse(&mut s, "1000").unwrap().render(&s) == "1 times 10 sup { 3 }");
+    assert!(p.parse(&mut s, "3e-9").unwrap().render(&s) == "3 times 10 sup { -9 }");
 }
