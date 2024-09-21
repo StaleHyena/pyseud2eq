@@ -14,4 +14,4 @@ regex = "1"
 [dependencies.rug]
 version = "1.14"
 default-features = false
-features = ["float"]
+features = ["float", "std"]

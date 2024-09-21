@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::ops;
 use std::vec::Vec;
-use rug::{Float, ops::Pow};
+use rug::{ self, Float, ops::Pow };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum RepStyle {
@@ -53,7 +53,7 @@ impl Scope {
                     _ => None,
                 }
             },
-            ExprKind::BinaryOp(lhs, op, rhs) => {
+            BinaryOp(lhs, op, rhs) => {
                 match op {
                     At | NotEquals | GreaterThan | LesserThan | GtEquals | LtEquals => None,
                     o if ASSIGNING_OPS.contains(o) => self.eval(rhs).or_else(|| { self.eval(lhs) }),
@@ -206,6 +206,7 @@ impl fmt::Display for Opcode {
 
 impl Render for Target {
     fn render(&self, scope: &Scope) -> String {
+        eprintln!("render target");
         use Target::*;
         match self {
             ExprSet(set) => format!("{}", set.render(scope)),
@@ -228,6 +229,7 @@ impl Render for ExprKind {
 }
 impl Render for Expr {
     fn render(&self, scope: &Scope) -> String {
+        eprintln!("render expr");
         if let Some(unit) = &self.unit {
             format!("{} {{ {} }}", self.v.render(scope), unit)
         } else {
@@ -237,13 +239,15 @@ impl Render for Expr {
 }
 impl Render for ExprSet {
     fn render(&self, scope: &Scope) -> String {
+        eprintln!("render exprset");
         format!("{}", self.iter().map(|e| e.render(scope)).collect::<Vec<String>>().join("; ~~~ "))
     }
 }
 impl Render for Float {
     fn render(&self, scope: &Scope) -> String {
+        eprintln!("render float {}", self);
         let (val,s,n) = style_suffix(self.clone(), scope.repstyle);
-        let mut vstr = val.to_string_radix_round(10, Some(3*8), rug::float::Round::Nearest);
+        let mut vstr = val.to_string_radix(10, Some(3*8));
 
         if let Some(dotidx) = vstr.find('.') {
             // this is a mess
@@ -272,8 +276,10 @@ impl Render for Float {
     }
 }
 
-fn closest_common_exp(mut val: Float, e: u32) -> (Float, isize) {
-    if val == 0 { return (val, 0) }
+fn closest_common_exp(val_og: Float, e: u32) -> (Float, isize) {
+    if val_og == 0 { return (val_og, 0) }
+    let snum = Float::with_val(val_og.prec(), val_og.signum_ref());
+    let mut val = val_og.clone().abs();
     let mut n = 0_isize;
     let one = Float::with_val(val.prec(), 1_u32);
     let e = Float::with_val(val.prec(), e);
@@ -288,7 +294,9 @@ fn closest_common_exp(mut val: Float, e: u32) -> (Float, isize) {
         val = val * &c;
         n -= 1;
     }
-    (val, n)
+    let rr = (snum * val, n);
+    eprintln!("closest common exp for {} is ({}, {})", val_og, rr.0, rr.1);
+    rr
 }
 
 fn style_suffix(val: Float, style: RepStyle) -> (Float, Option<String>, isize) {

@@ -39,7 +39,12 @@ pub EquationOp: Opcode = {
 };
 
 pub Expr: Box<Expr> = {
-	Expr ExprOp FactorLate => Box::new(Expr::new(ExprKind::BinaryOp(<>))),
+  <a:Expr> "@" <b:ExprEarly> => Box::new(Expr::new(ExprKind::BinaryOp(a, At, b))),
+  ExprEarly,
+};
+
+pub ExprEarly: Box<Expr> = {
+	ExprEarly ExprOp FactorLate => Box::new(Expr::new(ExprKind::BinaryOp(<>))),
 	ExprOp FactorLate => Box::new(Expr::new(ExprKind::UnaryOp(<>))),
 	FactorLate,
 };
@@ -47,7 +52,6 @@ pub Expr: Box<Expr> = {
 ExprOp: Opcode = {
 	"+" => Add,
 	"-" => Sub,
-  "@" => At,
 };
 
 FactorLate: Box<Expr> = {
